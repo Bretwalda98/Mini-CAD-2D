@@ -1,0 +1,1037 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Mini‑CAD 2D — Compatibility Pro r3</title>
+<style>
+  :root{
+    --bg:#0b0e14; --panel:#121625; --ink:#e8ecf1; --muted:#9aa4b2; --accent:#4da3ff; --accent2:#47e5a1;
+    --grid-minor:#2e344a; --grid-major:#4f5b88; --axis:#7aa2ff; --sel:#7aa2ff33;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%; margin:0; background:var(--bg); color:var(--ink); font-family:Arial,Helvetica,system-ui; overscroll-behavior:none}
+  #app{display:grid; grid-template-columns:auto 1fr 260px; grid-template-rows:auto 1fr auto; grid-template-areas:
+    "top top top"
+    "left mid right"
+    "bot bot bot"; height:100vh}
+  header{grid-area:top; display:flex; align-items:center; gap:.5rem; padding:.5rem; background:var(--panel); border-bottom:1px solid #1e2335; flex-wrap:wrap}
+  header .seg{display:inline-flex; gap:.4rem; flex-wrap:wrap}
+  header button{background:#171c2b; color:var(--ink); border:1px solid #263050; padding:.45rem .7rem; border-radius:.4rem; cursor:pointer; font-size:.95rem}
+  header button:hover{border-color:#2f3b68}
+  header label{display:inline-flex; align-items:center; gap:.45rem; color:#c9d1e0; font-size:.9rem; margin:0 .25rem}
+  #left{grid-area:left; position:relative; padding:.5rem}
+  #toolbox{
+    position:sticky; top:.5rem; display:flex; flex-direction:column; gap:.5rem;
+    background:#11162aee; border:1px solid #2a3358; border-radius:.5rem; padding:.5rem;
+  }
+  #toolbox button{width:44px; height:44px; background:#161c32; color:#dfe7ff; border:1px solid #2c3861; border-radius:.4rem; cursor:pointer; font-size:.85rem}
+  #toolbox button.active{outline:2px solid var(--accent)}
+  #toolbox .row{display:flex; flex-wrap:wrap; gap:.35rem}
+  #toolbox .group{display:flex; flex-direction:column; gap:.35rem}
+  #toolbox .title{font-size:.75rem; color:#aab6d8; text-align:center}
+  #mid{grid-area:mid; position:relative}
+  canvas{display:block; width:100%; height:100%; background:transparent; touch-action:none}
+  #right{grid-area:right; background:#0f1426; border-left:1px solid #1e2335; padding:.5rem; overflow:auto}
+  #panel h3{margin:.4rem 0 .4rem; font-size:1rem; color:#cfe3ff}
+  #panel .row{display:flex; align-items:center; justify-content:space-between; margin:.25rem 0; gap:.4rem}
+  #panel input[type="color"]{width:36px; height:24px; border:1px solid #2a3358; background:#0b0e14}
+  #panel select, #panel input[type="text"], #panel input[type="number"]{flex:1; background:#101425; color:#e6e6e6; border:1px solid #1e2436; border-radius:.25rem; padding:.25rem .35rem}
+  #cmd{grid-area:bot; padding:.4rem .6rem; background:#0e1324; border-top:1px solid #1e2335; display:flex; gap:.5rem; align-items:center; color:#9aa4b2; font:14px/1.2 monospace; flex-wrap:wrap}
+  #status{margin-left:auto; color:#9aa4b2; font:14px/1.2 monospace}
+  #err{position:absolute; left:8px; bottom:8px; background:#330d10; color:#ffd7d7; border:1px solid #5a1e1e; padding:.4rem .5rem; border-radius:.4rem; font:12px/1.2 monospace; display:none; max-width:90vw; white-space:pre-wrap; z-index:50}
+  #fileInput{display:none}
+  .pill{padding:.1rem .4rem; border:1px solid #2a3046; border-radius:.4rem; background:#12182a; color:#fff}
+  .toggle{display:inline-flex; align-items:center; gap:.3rem; margin-right:.6rem}
+  .hint{color:#94a3b8; font-size:12px; margin-top:.35rem}
+  @media (max-width: 900px){
+    #app{grid-template-columns: auto 1fr; grid-template-rows:auto 1fr auto auto; grid-template-areas:
+      "top top"
+      "left mid"
+      "right right"
+      "bot bot";}
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div class="seg">
+      <button id="openBtn" title="Open JSON/DXF (Ctrl+O)">Open</button>
+      <button id="saveBtn" title="Save JSON (Ctrl+S)">Save</button>
+      <button id="saveDxfBtn" title="Save As DXF">DXF</button>
+      <input type="file" id="fileInput" accept=".json,.dxf,.txt" />
+    </div>
+    <div class="seg">
+      <label class="toggle"><input type="checkbox" id="showGrid" checked />Grid</label>
+      <label class="toggle"><input type="checkbox" id="snapGrid" checked />Snap Grid</label>
+      <label class="toggle"><input type="checkbox" id="snapEnds" checked />Snap End</label>
+      <label class="toggle"><input type="checkbox" id="snapMids" checked />Snap Mid</label>
+      <label class="toggle"><input type="checkbox" id="snapInters" />Snap Int</label>
+      <label class="toggle"><input type="checkbox" id="orthoLock" />Ortho (F8)</label>
+      <label class="toggle">Grid <input id="gridStep" type="number" min="5" max="500" step="5" value="50" style="width:5.5rem" /></label>
+      <button id="forceRedraw">Force Redraw</button>
+      <button id="resetView">Reset View</button>
+      <button id="testPattern">Test Pattern</button>
+    </div>
+  </header>
+
+  <div id="left">
+    <div id="toolbox">
+      <div class="group">
+        <div class="title">Draw</div>
+        <div class="row">
+          <button id="tb-select" class="active" title="Select (V)">Sel</button>
+          <button id="tb-line" title="Line (L)">Line</button>
+          <button id="tb-poly" title="Polyline (PL)">Pline</button>
+          <button id="tb-rect" title="Rectangle (REC)">Rect</button>
+          <button id="tb-circle" title="Circle (C)">Circ</button>
+        </div>
+      </div>
+      <div class="group">
+        <div class="title">Modify</div>
+        <div class="row">
+          <button id="tb-move" title="Move (M)">Move</button>
+          <button id="tb-copy" title="Copy (CO)">Copy</button>
+          <button id="tb-rotate" title="Rotate (RO)">Rot</button>
+          <button id="tb-scale" title="Scale (SC)">Scale</button>
+          <button id="tb-erase" title="Erase (E)">Erase</button>
+        </div>
+      </div>
+      <div class="group">
+        <div class="title">View</div>
+        <div class="row">
+          <button id="tb-pan" title="Pan (Middle/Right drag)">Pan</button>
+          <button id="tb-zoom-win" title="Zoom Window (Z→W)">ZWin</button>
+          <button id="tb-zoom-prev" title="Zoom Previous (Z→P)">ZPrev</button>
+          <button id="tb-zoom-ext" title="Zoom Extents (Z→E)">ZExt</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="mid">
+    <canvas id="c"></canvas>
+    <pre id="err"></pre>
+  </div>
+
+  <aside id="right">
+    <div id="panel">
+      <h3>Layers</h3>
+      <div class="row">
+        <label for="layerSelect">Current</label>
+        <select id="layerSelect"></select>
+      </div>
+      <div class="row">
+        <input id="newLayerName" type="text" placeholder="New layer name" />
+        <input id="newLayerColor" type="color" value="#e0e6ff" />
+      </div>
+      <div class="row">
+        <button id="addLayerBtn">Add</button>
+        <button id="toggleLayerBtn">Hide/Show</button>
+        <button id="delLayerBtn">Delete</button>
+      </div>
+      <div class="hint">Entities remember their layer. Hidden layers don't render.</div>
+
+      <h3>Properties</h3>
+      <div id="propContent">
+        <div class="row"><span>Selection:</span> <span id="selInfo">0</span></div>
+        <div class="row">
+          <label for="propLayer">Layer</label>
+          <select id="propLayer"></select>
+        </div>
+        <div class="row">
+          <label for="propColor">Color</label>
+          <input id="propColor" type="color" value="#e0e6ff" />
+        </div>
+        <div class="row">
+          <button id="applyProps">Apply</button>
+        </div>
+      </div>
+
+      <h3>Command Line</h3>
+      <div class="row">
+        <input id="cmdInput" type="text" placeholder="Type: LINE, PLINE, REC, C, M, CO, RO, SC, E, Z" />
+      </div>
+      <div class="hint">Space repeats last command. ESC cancels.</div>
+    </div>
+  </aside>
+
+  <div id="cmd">
+    <div>Mode: <span id="modeLbl" class="pill">Select</span></div>
+    <div id="status">Snap <span id="snapLbl">—</span> • Cursor <span id="cursorLbl">0,0</span> • Zoom <span id="zoomLbl">100%</span></div>
+  </div>
+</div>
+
+<script>
+(function(){
+  var err = document.getElementById('err');
+  function showErr(msg){ err.style.display='block'; err.textContent = String(msg); }
+
+  window.addEventListener('error', function(e){ showErr((e.message||'error') + (e.filename? ("\\n"+e.filename+":"+e.lineno):'')); });
+
+  var canvas = document.getElementById('c');
+  var ctx = canvas.getContext('2d');
+  if(!ctx){ showErr('2D canvas not available.'); return; }
+  var dpr = Math.max(1, window.devicePixelRatio || 1);
+  var W=0, H=0;
+  function hypot2(a,b){ return Math.sqrt(a*a+b*b); }
+
+  var state = {
+    scale: 1.0, ox: 0, oy: 0,
+    mode: 'select',
+    mouse: {x:0,y:0, wx:0, wy:0},
+    grid: {step: 50},
+    snaps: {grid:true, ends:true, mids:true, inters:false},
+    ortho: false, showGrid: true,
+    layers: [{name:'0', color:'#e0e6ff', visible:true}],
+    currentLayer: '0',
+    drawing: {entities: [], selection: {}},
+    action: null,
+    viewPrev: null,
+    history: [], future: [],
+    lastCmd: ''
+  };
+
+  function setCanvasSize(){
+    var rect = canvas.getBoundingClientRect();
+    W = Math.max(100, Math.floor(rect.width * dpr));
+    H = Math.max(100, Math.floor(rect.height * dpr));
+    canvas.width = W; canvas.height = H;
+    // Important: clear with identity, then set transform
+    ctx.setTransform(1,0,0,1,0,0);
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    if(state.ox===0 && state.oy===0){ state.ox=rect.width/2; state.oy=rect.height/2; state.scale=1.0; }
+    draw();
+  }
+  function w2s(x,y){ return {x:x*state.scale+state.ox, y:-y*state.scale+state.oy}; }
+  function s2w(sx,sy){ return {x:(sx-state.ox)/state.scale, y:-(sy-state.oy)/state.scale}; }
+  function fmt(v){ return (Math.round(v*100)/100).toFixed(2); }
+  function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
+  function getCSS(name){
+    var cs=getComputedStyle(document.documentElement).getPropertyValue(name);
+    return cs ? cs.trim() : '#888';
+  }
+  function currentLayerObj(){ for(var i=0;i<state.layers.length;i++){ if(state.layers[i].name===state.currentLayer) return state.layers[i]; } return state.layers[0]; }
+
+  function snapshot(){
+    state.history.push(JSON.stringify({entities:state.drawing.entities, layers:state.layers, currentLayer:state.currentLayer}));
+    if(state.history.length>200) state.history.shift();
+    state.future.length=0;
+  }
+  function undo(){ if(!state.history.length) return; state.future.push(JSON.stringify({entities:state.drawing.entities, layers:state.layers, currentLayer:state.currentLayer})); var d=JSON.parse(state.history.pop()); state.drawing.entities=d.entities||[]; state.layers=d.layers||state.layers; state.currentLayer=d.currentLayer||'0'; rebuildLayerUI(); clearSelection(); draw(); }
+  function redo(){ if(!state.future.length) return; state.history.push(JSON.stringify({entities:state.drawing.entities, layers:state.layers, currentLayer:state.currentLayer})); var d=JSON.parse(state.future.pop()); state.drawing.entities=d.entities||[]; state.layers=d.layers||state.layers; state.currentLayer=d.currentLayer||'0'; rebuildLayerUI(); clearSelection(); draw(); }
+
+  function draw(){
+    try{
+      // Clear safely
+      ctx.setTransform(1,0,0,1,0,0);
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+      ctx.setTransform(dpr,0,0,dpr,0,0);
+
+      var rect = canvas.getBoundingClientRect();
+      drawGrid(); drawEntities(); drawOverlays();
+      var snap=getSnap(state.mouse.wx,state.mouse.wy, state.mouse.x, state.mouse.y);
+      document.getElementById('cursorLbl').textContent = fmt(state.mouse.wx)+','+fmt(state.mouse.wy);
+      document.getElementById('zoomLbl').textContent = Math.round(state.scale*100)+'%';
+      document.getElementById('snapLbl').textContent = snap? snap.kind : '—';
+    }catch(e){ showErr(e.message||e); }
+  }
+  function drawGrid(){
+    if(!state.showGrid) return;
+    var rect = canvas.getBoundingClientRect();
+    var stepW = state.grid.step;
+    var stepS = stepW * state.scale;
+    var majorEvery = 5;
+    var majorStepS = stepS * majorEvery;
+    var left=-state.ox, right=rect.width-state.ox, top=-state.oy, bottom=rect.height-state.oy;
+    var startXMinor=Math.floor(left/stepS)*stepS, startYMinor=Math.floor(top/stepS)*stepS;
+    var startXMajor=Math.floor(left/majorStepS)*majorStepS, startYMajor=Math.floor(top/majorStepS)*majorStepS;
+
+    ctx.save(); ctx.translate(state.ox,state.oy);
+    if(stepS < 8){
+      var dotGap = Math.max(majorStepS, 24);
+      var sx = Math.floor(left/dotGap)*dotGap;
+      var sy = Math.floor(top/dotGap)*dotGap;
+      ctx.fillStyle = getCSS('--grid-major');
+      for(var x=sx;x<=right;x+=dotGap){
+        for(var y=sy;y<=bottom;y+=dotGap){
+          ctx.fillRect(x-0.5,y-0.5,1.5,1.5);
+        }
+      }
+    } else {
+      ctx.beginPath();
+      for(var x2=startXMinor;x2<=right;x2+=stepS){ ctx.moveTo(x2,top); ctx.lineTo(x2,bottom); }
+      for(var y2=startYMinor;y2<=bottom;y2+=stepS){ ctx.moveTo(left,y2); ctx.lineTo(right,y2); }
+      ctx.lineWidth = 1; ctx.strokeStyle = getCSS('--grid-minor'); ctx.stroke();
+
+      ctx.beginPath();
+      for(var x3=startXMajor;x3<=right;x3+=majorStepS){ ctx.moveTo(x3,top); ctx.lineTo(x3,bottom); }
+      for(var y3=startYMajor;y3<=bottom;y3+=majorStepS){ ctx.moveTo(left,y3); ctx.lineTo(right,y3); }
+      ctx.lineWidth = 1.5; ctx.strokeStyle = getCSS('--grid-major'); ctx.stroke();
+    }
+    ctx.beginPath(); ctx.moveTo(-state.ox,0); ctx.lineTo(rect.width-state.ox,0); ctx.moveTo(0,-state.oy); ctx.lineTo(0,rect.height-state.oy);
+    ctx.lineWidth=1.2; ctx.strokeStyle=getCSS('--axis'); ctx.stroke();
+    ctx.restore();
+  }
+  function entVisible(e){
+    for(var i=0;i<state.layers.length;i++){ var L=state.layers[i]; if(L.name===e.layer){ return L.visible!==false; } }
+    return true;
+  }
+  function drawEntities(){
+    ctx.lineCap='round'; ctx.lineJoin='round'; ctx.lineWidth=1.6;
+    for(var i=0;i<state.drawing.entities.length;i++){
+      var e = state.drawing.entities[i];
+      if(!entVisible(e)) continue;
+      var col = e.color || currentLayerColor(e.layer) || '#e0e6ff';
+      ctx.strokeStyle = col;
+      ctx.beginPath();
+      for(var j=0;j<e.pts.length;j++){
+        var p = w2s(e.pts[j].x, e.pts[j].y);
+        if(j===0) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y);
+      }
+      if(e.closed && e.pts.length>1){ var p0=w2s(e.pts[0].x,e.pts[0].y); ctx.lineTo(p0.x,p0.y); }
+      ctx.stroke();
+
+      if(state.drawing.selection[i]){
+        for(var k=0;k<e.pts.length;k++){ drawGrip(e.pts[k]); }
+        for(var m=0;m<e.pts.length-1;m++){ drawMidGrip({x:(e.pts[m].x+e.pts[m+1].x)/2, y:(e.pts[m].y+e.pts[m+1].y)/2}); }
+      }
+    }
+  }
+  function drawOverlays(){
+    if(state.action && state.action.type==='box'){
+      var x = Math.min(state.action.x0,state.action.x1);
+      var y = Math.min(state.action.y0,state.action.y1);
+      var w = Math.abs(state.action.x1-state.action.x0);
+      var h = Math.abs(state.action.y1-state.action.y0);
+      ctx.fillStyle=getCSS('--sel'); ctx.strokeStyle='#7aa2ffaa'; ctx.lineWidth=1; ctx.fillRect(x,y,w,h); ctx.strokeRect(x,y,w,h);
+    }
+    if(state.action && state.action.type && state.action.pts && state.action.pts.length){
+      var A=state.action, pts=A.pts;
+      ctx.strokeStyle=getCSS('--accent2'); ctx.setLineDash([6,4]); ctx.beginPath();
+      if(A.type==='drawRect' && pts.length>=1){
+        var a=pts[0]; var b=A.preview||a;
+        var r=[{x:a.x,y:a.y},{x:b.x,y:a.y},{x:b.x,y:b.y},{x:a.x,y:b.y},{x:a.x,y:a.y}];
+        for(var i=0;i<r.length;i++){ var s=w2s(r[i].x,r[i].y); if(i===0) ctx.moveTo(s.x,s.y); else ctx.lineTo(s.x,s.y); }
+      } else if(A.type==='drawCircle' && pts.length>=1){
+        var c=pts[0]; var b2=A.preview||c; var rad=hypot2(b2.x-c.x, b2.y-c.y); var N=64;
+        for(var k=0;k<=N;k++){ var ang=k/N*2*Math.PI; var s2=w2s(c.x+rad*Math.cos(ang), c.y+rad*Math.sin(ang)); if(k===0) ctx.moveTo(s2.x,s2.y); else ctx.lineTo(s2.x,s2.y); }
+      } else {
+        for(var j=0;j<pts.length;j++){ var s3=w2s(pts[j].x,pts[j].y); if(j===0) ctx.moveTo(s3.x,s3.y); else ctx.lineTo(s3.x,s3.y); }
+        if(A.preview){ var s4=w2s(A.preview.x,A.preview.y); ctx.lineTo(s4.x,s4.y); }
+      }
+      ctx.stroke(); ctx.setLineDash([]);
+    }
+  }
+  function drawGrip(p){ var s=w2s(p.x,p.y); ctx.fillStyle=getCSS('--accent'); var r=4.5; ctx.fillRect(s.x-r,s.y-r,r*2,r*2); }
+  function drawMidGrip(p){ var s=w2s(p.x,p.y); ctx.fillStyle='#9de6ff'; var r=3.5; ctx.fillRect(s.x-r,s.y-r,r*2,r*2); }
+
+  function currentLayerColor(name){
+    for(var i=0;i<state.layers.length;i++){ if(state.layers[i].name===name) return state.layers[i].color; }
+    return '#e0e6ff';
+  }
+
+  function getSnap(wx,wy,sx,sy){
+    var ap=12; var best=null, bestD=1e9;
+    function trySnap(x,y,kind){
+      var s=w2s(x,y); var dx=s.x-sx, dy=s.y-sy; var d=hypot2(dx,dy);
+      if(d<=ap && d<bestD){ bestD=d; best={x:x,y:y,kind:kind}; }
+    }
+    var i,j,e;
+    if(state.snaps.ends){
+      for(i=0;i<state.drawing.entities.length;i++){
+        e=state.drawing.entities[i]; if(!entVisible(e)) continue;
+        for(j=0;j<e.pts.length;j++){ trySnap(e.pts[j].x, e.pts[j].y, 'end'); }
+      }
+    }
+    if(state.snaps.mids){
+      for(i=0;i<state.drawing.entities.length;i++){
+        e=state.drawing.entities[i]; if(!entVisible(e)) continue;
+        for(j=0;j<e.pts.length-1;j++){ trySnap((e.pts[j].x+e.pts[j+1].x)/2, (e.pts[j].y+e.pts[j+1].y)/2, 'mid'); }
+      }
+    }
+    if(state.snaps.inters){
+      var segs = collectNearSegments(sx,sy,14);
+      for(var a=0;a<segs.length;a++){
+        for(var b=0;b<segs.length;b++){
+          if(b<=a) continue;
+          var P = segIntersect(segs[a].a, segs[a].b, segs[b].a, segs[b].b);
+          if(P) trySnap(P.x, P.y, 'int');
+        }
+      }
+    }
+    if(state.snaps.grid){
+      var step=state.grid.step; trySnap(Math.round(wx/step)*step, Math.round(wy/step)*step, 'grid');
+    }
+    return best;
+  }
+  function collectNearSegments(sx,sy,pix){
+    var res=[], i,j,e,a,b,sa,sb,d;
+    for(i=0;i<state.drawing.entities.length;i++){
+      e=state.drawing.entities[i]; if(!entVisible(e)) continue;
+      for(j=0;j<e.pts.length-1;j++){
+        a=e.pts[j]; b=e.pts[j+1];
+        sa=w2s(a.x,a.y); sb=w2s(b.x,b.y);
+        d = distToSeg({x:sx,y:sy}, sa, sb);
+        if(d<=pix) res.push({a:a, b:b});
+      }
+    }
+    return res;
+  }
+  function distToSeg(p,a,b){
+    var vx=b.x-a.x, vy=b.y-a.y;
+    var wx=p.x-a.x, wy=p.y-a.y;
+    var c1=vx*wx+vy*wy;
+    if(c1<=0) return Math.sqrt(wx*wx+wy*wy);
+    var c2=vx*vx+vy*vy;
+    if(c2<=c1) return Math.sqrt((p.x-b.x)*(p.x-b.x)+(p.y-b.y)*(p.y-b.y));
+    var t=c1/c2;
+    var qx=a.x+t*vx, qy=a.y+t*vy;
+    return Math.sqrt((p.x-qx)*(p.x-qx)+(p.y-qy)*(p.y-qy));
+  }
+  function segIntersect(a1,a2,b1,b2){
+    var x1=a1.x, y1=a1.y, x2=a2.x, y2=a2.y;
+    var x3=b1.x, y3=b1.y, x4=b2.x, y4=b2.y;
+    var den=(x1-x2)*(y3-y4)-(y1-y2)*(x3-x4);
+    if(Math.abs(den)<1e-9) return null;
+    var px=((x1*y2 - y1*x2)*(x3 - x4) - (x1 - x2)*(x3*y4 - y3*x4))/den;
+    var py=((x1*y2 - y1*x2)*(y3 - y4) - (y1 - y2)*(x3*y4 - y3*x4))/den;
+    function within(x,a,b){ var min=Math.min(a,b)-1e-6, max=Math.max(a,b)+1e-6; return x>=min && x<=max; }
+    if(within(px,x1,x2) && within(py,y1,y2) && within(px,x3,x4) && within(py,y3,y4)) return {x:px,y:py};
+    return null;
+  }
+  function applyOrtho(last,cur){
+    var dx=cur.x-last.x, dy=cur.y-last.y;
+    if(Math.abs(dx)>Math.abs(dy)) return {x:cur.x,y:last.y};
+    return {x:last.x,y:cur.y};
+  }
+
+  function clearSelection(){ state.drawing.selection={}; updateSelInfo(); }
+  function setSelected(i, on){ if(on) state.drawing.selection[i]=true; else delete state.drawing.selection[i]; updateSelInfo(); }
+  function selectionIndices(){ var out=[]; for(var k in state.drawing.selection){ if(state.drawing.selection.hasOwnProperty(k)) out.push(parseInt(k,10)); } return out.sort(function(a,b){return a-b;}); }
+  function updateSelInfo(){ var count=selectionIndices().length; document.getElementById('selInfo').textContent = count; }
+
+  var isPanning=false, panX0=0, panY0=0, ox0=0, oy0=0;
+  var dragGrip=null;
+  canvas.addEventListener('contextmenu', function(e){ e.preventDefault && e.preventDefault(); return false; });
+
+  canvas.addEventListener('mousedown', function(e){
+    var rect=canvas.getBoundingClientRect();
+    var x=e.clientX-rect.left, y=e.clientY-rect.top;
+    state.mouse.x=x; state.mouse.y=y; var w=s2w(x,y); state.mouse.wx=w.x; state.mouse.wy=w.y;
+
+    if(state.action && state.action.type==='zoomwin'){
+      if(!state.action.first){ state.action.first={x:x,y:y}; state.action.x0=x; state.action.y0=y; state.action.x1=x; state.action.y1=y; state.action.boxing=true; return; }
+      else { doZoomWindowPx(state.action.first, {x:x,y:y}); state.action=null; draw(); return; }
+    }
+
+    if(e.button===1 || e.button===2 || state.mode==='pan'){ isPanning=true; panX0=x; panY0=y; ox0=state.ox; oy0=state.oy; return; }
+
+    if(state.action && state.action.type==='modify'){
+      var ptSnap=getSnap(w.x,w.y,x,y), pt = ptSnap? {x:ptSnap.x,y:ptSnap.y} : {x:w.x,y:w.y};
+      if(state.action.stage===0){
+        state.action.base=pt; state.action.stage=1;
+        return;
+      } else {
+        if(state.action.kind==='move' || state.action.kind==='copy'){
+          var dx=pt.x - state.action.base.x, dy=pt.y - state.action.base.y;
+          applyTranslate(dx,dy, state.action.kind==='copy'); state.action=null; draw(); return;
+        }
+        if(state.action.kind==='rotate'){
+          var ang = Math.atan2(pt.y - state.action.base.y, pt.x - state.action.base.x) * 180/Math.PI;
+          applyRotate(ang, state.action.base, false); state.action=null; draw(); return;
+        }
+        if(state.action.kind==='scale'){
+          var ref = firstSelectedPoint() || state.action.base;
+          var d0 = hypot2(ref.x - state.action.base.x, ref.y - state.action.base.y);
+          var d1 = hypot2(pt.x - state.action.base.x, pt.y - state.action.base.y);
+          var fac = (d0>1e-9)? (d1/d0) : 1;
+          applyScale(fac, state.action.base, false); state.action=null; draw(); return;
+        }
+      }
+    }
+
+    var g = hitGripAt(x,y);
+    if(g){ snapshot(); dragGrip=g; return; }
+
+    if(state.mode==='select'){
+      var idx=hitEntityAt(x,y);
+      if(idx!==-1){
+        if(!e.shiftKey) clearSelection();
+        setSelected(idx, !state.drawing.selection[idx]);
+        draw();
+      }else{
+        state.action={type:'box', x0:x,y0:y,x1:x,y1:y};
+      }
+      return;
+    }
+
+    if(state.mode==='line' || state.mode==='poly'){
+      if(!state.action){ state.action={type: state.mode==='line'? 'drawLine':'drawPoly', pts: []}; }
+      var s=getSnap(w.x,w.y,x,y);
+      var pt=s? {x:s.x,y:s.y} : {x:w.x,y:w.y};
+      if(state.ortho && state.action.pts.length){ pt=applyOrtho(state.action.pts[state.action.pts.length-1], pt); }
+      state.action.pts.push(pt); draw(); return;
+    }
+    if(state.mode==='rect'){
+      if(!state.action){ state.action={type:'drawRect', pts:[{x:w.x,y:w.y}]}; draw(); return; }
+      state.action.pts[1]={x:w.x,y:w.y};
+      var a=state.action.pts[0], b=state.action.pts[1];
+      var r=[{x:a.x,y:a.y},{x:b.x,y:a.y},{x:b.x,y:b.y},{x:a.x,y:b.y}];
+      snapshot(); state.drawing.entities.push({type:'poly', pts:r, closed:true, layer:state.currentLayer}); state.action=null; draw(); return;
+    }
+    if(state.mode==='circle'){
+      if(!state.action){ state.action={type:'drawCircle', pts:[{x:w.x,y:w.y}]}; draw(); return; }
+      var cen=state.action.pts[0]; var rad=hypot2(w.x-cen.x, w.y-cen.y);
+      snapshot(); addCircleAsPoly(cen,rad, state.currentLayer, null); state.action=null; draw(); return;
+    }
+  });
+  window.addEventListener('dblclick', function(e){
+    // finish polyline on double click
+    if(state.action && state.action.type==='drawPoly' && state.action.pts.length>=2){
+      snapshot(); state.drawing.entities.push({type:'poly', pts:state.action.pts.slice(0), closed:false, layer:state.currentLayer}); state.action=null; draw();
+    }
+  });
+  window.addEventListener('mousemove', function(e){
+    var rect=canvas.getBoundingClientRect();
+    var x=e.clientX-rect.left, y=e.clientY-rect.top;
+    state.mouse.x=x; state.mouse.y=y; var w=s2w(x,y); state.mouse.wx=w.x; state.mouse.wy=w.y;
+
+    if(isPanning){ state.ox = ox0 + (x - panX0); state.oy = oy0 + (y - panY0); draw(); return; }
+
+    if(state.action && state.action.boxing){
+      state.action.x1=x; state.action.y1=y; draw(); return;
+    }
+
+    if(dragGrip){
+      var eidx=dragGrip.ei, vi=dragGrip.vi;
+      var s=getSnap(w.x,w.y,x,y);
+      var pt=s? {x:s.x,y:s.y} : {x:w.x,y:w.y};
+      var ent=state.drawing.entities[eidx]; if(ent){ ent.pts[vi]=pt; draw(); }
+      return;
+    }
+
+    if(state.action && state.action.type==='box'){
+      state.action.x1=x; state.action.y1=y;
+      var xMin=Math.min(state.action.x0,state.action.x1), xMax=Math.max(state.action.x0,state.action.x1);
+      var yMin=Math.min(state.action.y0,state.action.y1), yMax=Math.max(state.action.y0,state.action.y1);
+      clearSelection();
+      for(var i=0;i<state.drawing.entities.length;i++){
+        var e2=state.drawing.entities[i]; if(!entVisible(e2)) continue;
+        var inside=true;
+        for(var j=0;j<e2.pts.length;j++){ var s2=w2s(e2.pts[j].x,e2.pts[j].y); if(s2.x<xMin||s2.x>xMax||s2.y<yMin||s2.y>yMax){ inside=false; break; } }
+        if(inside) setSelected(i,true);
+      }
+      draw(); return;
+    }
+
+    if(state.action && state.action.type && state.action.type.indexOf('draw')===0){
+      var base = state.action.pts.length? state.action.pts[state.action.pts.length-1] : null;
+      var s=getSnap(w.x,w.y,x,y);
+      var pt = s? {x:s.x,y:s.y} : {x:w.x,y:w.y};
+      if(state.ortho && base){ pt=applyOrtho(base, pt); }
+      state.action.preview=pt; draw(); return;
+    }
+    draw();
+  });
+  window.addEventListener('mouseup', function(e){
+    isPanning=false;
+    if(dragGrip){ dragGrip=null; draw(); return; }
+    if(state.action && state.action.type==='drawLine'){
+      if(state.action.pts.length===2){
+        snapshot(); state.drawing.entities.push({type:'poly', pts:[state.action.pts[0], state.action.pts[1]], closed:false, layer:state.currentLayer}); state.action=null; draw();
+      }
+      return;
+    }
+    if(state.action && state.action.type==='box'){ state.action=null; draw(); return; }
+  });
+
+  var t0=null, t1=null, pinchStartDist=0, pinchStartScale=1;
+  canvas.addEventListener('touchstart', function(e){
+    if(e.touches.length===1){
+      t0=e.touches[0];
+      var rect=canvas.getBoundingClientRect();
+      var x=t0.clientX-rect.left, y=t0.clientY-rect.top;
+      isPanning=true; panX0=x; panY0=y; ox0=state.ox; oy0=state.oy;
+    } else if(e.touches.length===2){
+      t0=e.touches[0]; t1=e.touches[1];
+      pinchStartDist = hypot2(t0.clientX-t1.clientX, t0.clientY-t1.clientY);
+      pinchStartScale = state.scale;
+    }
+  }, false);
+  canvas.addEventListener('touchmove', function(e){
+    if(e.touches.length===1 && isPanning){
+      var rect=canvas.getBoundingClientRect();
+      var x=e.touches[0].clientX-rect.left, y=e.touches[0].clientY-rect.top;
+      state.ox = ox0 + (x - panX0); state.oy = oy0 + (y - panY0); draw();
+    } else if(e.touches.length===2){
+      var a=e.touches[0], b=e.touches[1];
+      var d=hypot2(a.clientX-b.clientX, a.clientY-b.clientY);
+      var factor = d / (pinchStartDist||1);
+      var newScale = clamp(pinchStartScale * factor, 0.1, 20);
+      var rect=canvas.getBoundingClientRect();
+      var cx = (a.clientX+b.clientX)/2 - rect.left;
+      var cy = (a.clientY+b.clientY)/2 - rect.top;
+      var before = s2w(cx, cy);
+      state.scale = newScale;
+      var after = w2s(before.x, before.y);
+      state.ox += (cx - after.x);
+      state.oy += (cy - after.y);
+      draw();
+    }
+  }, false);
+  canvas.addEventListener('touchend', function(e){
+    if(e.touches.length===0){ isPanning=false; }
+  }, false);
+
+  canvas.addEventListener('wheel', function(e){
+    if(e.preventDefault) e.preventDefault(); else e.returnValue=false;
+    var rect=canvas.getBoundingClientRect(); var x=e.clientX-rect.left, y=e.clientY-rect.top; var before=s2w(x,y);
+    var delta = e.deltaY || e.wheelDelta || 0;
+    var factor = Math.exp(-(delta)*0.15/100);
+    state.scale=clamp(state.scale*factor, 0.1, 20);
+    var after=w2s(before.x,before.y);
+    state.ox += (x-after.x); state.oy += (y-after.y);
+    draw();
+  }, false);
+
+  function hitEntityAt(sx,sy){
+    var tol=10; var best=-1, bestD=1e9;
+    for(var i=0;i<state.drawing.entities.length;i++){
+      var e=state.drawing.entities[i]; if(!entVisible(e)) continue;
+      for(var j=0;j<e.pts.length-1;j++){
+        var a=w2s(e.pts[j].x,e.pts[j].y), b=w2s(e.pts[j+1].x,e.pts[j+1].y);
+        var d=distToSeg({x:sx,y:sy},a,b);
+        if(d<tol && d<bestD){ bestD=d; best=i; }
+      }
+    }
+    return best;
+  }
+  function hitGripAt(sx,sy){
+    var tol=8;
+    for(var i=0;i<state.drawing.entities.length;i++){
+      if(!state.drawing.selection[i]) continue;
+      var e=state.drawing.entities[i];
+      for(var j=0;j<e.pts.length;j++){
+        var s=w2s(e.pts[j].x,e.pts[j].y);
+        if(Math.abs(sx-s.x)<=tol && Math.abs(sy-s.y)<=tol) return {ei:i, vi:j};
+      }
+    }
+    return null;
+  }
+
+  var cmdInput = document.getElementById('cmdInput');
+  function setMode(m){ state.mode=m; document.getElementById('modeLbl').textContent=m.charAt(0).toUpperCase()+m.slice(1); draw(); }
+  function activateBtn(id){
+    var btns=document.querySelectorAll('#toolbox button'); for(var i=0;i<btns.length;i++){ btns[i].classList.remove('active'); }
+    var el=document.getElementById(id); if(el) el.classList.add('active');
+  }
+  function startCmd(name){
+    state.lastCmd=name;
+    if(name==='line') { setMode('line'); activateBtn('tb-line'); cmdInput.value=''; return; }
+    if(name==='pline'){ setMode('poly'); activateBtn('tb-poly'); cmdInput.value=''; return; }
+    if(name==='rect'){ setMode('rect'); activateBtn('tb-rect'); cmdInput.value=''; return; }
+    if(name==='circle'){ setMode('circle'); activateBtn('tb-circle'); cmdInput.value=''; return; }
+    if(name==='move'){ ensureSelection(); state.action={type:'modify', kind:'move', stage:0}; activateBtn('tb-move'); cmdInput.placeholder="Move: pick base point, then second point"; return; }
+    if(name==='copy'){ ensureSelection(); state.action={type:'modify', kind:'copy', stage:0}; activateBtn('tb-copy'); cmdInput.placeholder="Copy: pick base point, then second point"; return; }
+    if(name==='rotate'){ ensureSelection(); state.action={type:'modify', kind:'rotate', stage:0}; activateBtn('tb-rotate'); cmdInput.placeholder="Rotate: pick base point, then type angle or click second point"; return; }
+    if(name==='scale'){ ensureSelection(); state.action={type:'modify', kind:'scale', stage:0}; activateBtn('tb-scale'); cmdInput.placeholder="Scale: pick base point, then type factor (e.g., 2) or click second point"; return; }
+    if(name==='erase'){ eraseSelection(); cmdInput.value=''; return; }
+    if(name==='zoom'){ state.action={type:'zoomwin', stage:0}; activateBtn('tb-zoom-win'); cmdInput.placeholder="Zoom: E(extents)/P(previous)/W(window)"; return; }
+  }
+  function ensureSelection(){ if(selectionIndices().length===0){ setMode('select'); } }
+  function zoomCommandInput(t){
+    t=t||''; t=t.toLowerCase();
+    if(t==='e' || t==='extents'){ zoomExtents(); state.action=null; draw(); return true; }
+    if(t==='p' || t==='previous'){ zoomPrevious(); state.action=null; draw(); return true; }
+    if(t==='w' || t==='window'){ state.action={type:'zoomwin', stage:0}; cmdInput.placeholder="Zoom window: click first corner"; return true; }
+    return false;
+  }
+  function handleCmdEnter(txt){
+    var t=(txt||'').trim().toLowerCase();
+    if(state.action && state.action.type==='modify'){
+      if(state.action.kind==='rotate'){
+        var ang=parseFloat(t); if(isFinite(ang)){ applyRotate(ang, state.action.base||{x:0,y:0}, false); state.action=null; draw(); return; }
+      }
+      if(state.action.kind==='scale'){
+        var fac=parseFloat(t); if(isFinite(fac)){ applyScale(fac, state.action.base||{x:0,y:0}, false); state.action=null; draw(); return; }
+      }
+    }
+    if(!t){ if(state.lastCmd) startCmd(state.lastCmd); return; }
+    if(t==='l' || t==='line'){ startCmd('line'); return; }
+    if(t==='pl' || t==='pline'){ startCmd('pline'); return; }
+    if(t==='rec' || t==='rect' || t==='rectangle'){ startCmd('rect'); return; }
+    if(t==='c' || t==='circle'){ startCmd('circle'); return; }
+    if(t==='m' || t==='move'){ startCmd('move'); return; }
+    if(t==='co' || t==='copy'){ startCmd('copy'); return; }
+    if(t==='ro' || t==='rotate'){ startCmd('rotate'); return; }
+    if(t==='sc' || t==='scale'){ startCmd('scale'); return; }
+    if(t==='e' || t==='erase' || t==='del'){ startCmd('erase'); return; }
+    if(t==='z' || t==='zoom'){ startCmd('zoom'); return; }
+    if(!zoomCommandInput(t)){}
+  }
+  cmdInput.addEventListener('keydown', function(e){
+    if(e.key==='Enter'){ handleCmdEnter(cmdInput.value); cmdInput.value=''; }
+    if(e.key==='Escape'){ cancelAction(); }
+    if(e.key===' ' && !cmdInput.value){ if(state.lastCmd) startCmd(state.lastCmd); e.preventDefault && e.preventDefault(); }
+  });
+
+  window.addEventListener('keydown', function(e){
+    var tag=document.activeElement && document.activeElement.tagName ? document.activeElement.tagName.toLowerCase() : '';
+    if(tag!=='input' && tag!=='textarea'){
+      if(e.key && e.key.length===1 && !e.ctrlKey && !e.metaKey && !e.altKey){ cmdInput.value=e.key; cmdInput.focus(); try{ cmdInput.setSelectionRange(1,1); }catch(_e){} }
+    }
+    if((e.ctrlKey||e.metaKey) && (e.key==='z' || e.key==='Z')){ e.preventDefault(); undo(); }
+    if((e.ctrlKey||e.metaKey) && (e.key==='y' || (e.shiftKey && (e.key==='Z' || e.key==='z')))){ e.preventDefault(); redo(); }
+    if((e.ctrlKey||e.metaKey) && (e.key==='s' || e.key==='S')){ e.preventDefault(); saveJSON(); }
+    if((e.ctrlKey||e.metaKey) && (e.key==='o' || e.key==='O')){ e.preventDefault(); document.getElementById('fileInput').click(); }
+    if(e.key==='F8'){ state.ortho=!state.ortho; document.getElementById('orthoLock').checked=state.ortho; }
+    if(e.key==='v' || e.key==='V'){ setMode('select'); activateBtn('tb-select'); }
+    if(e.key==='l' || e.key==='L'){ setMode('line'); activateBtn('tb-line'); }
+    if(e.key==='p' || e.key==='P'){ setMode('poly'); activateBtn('tb-poly'); }
+  });
+
+  function cancelAction(){ state.action=null; draw(); }
+
+  function applyTranslate(dx,dy, asCopy){
+    snapshot();
+    var idxs=selectionIndices();
+    if(asCopy){
+      var newIdx=[];
+      for(var i=0;i<idxs.length;i++){
+        var e=state.drawing.entities[idxs[i]];
+        var pts=[], j;
+        for(j=0;j<e.pts.length;j++){ pts.push({x:e.pts[j].x+dx, y:e.pts[j].y+dy}); }
+        state.drawing.entities.push({type:e.type, pts:pts, closed:e.closed, layer:e.layer, color:e.color});
+        newIdx.push(state.drawing.entities.length-1);
+      }
+      state.drawing.selection={};
+      for(i=0;i<newIdx.length;i++){ state.drawing.selection[newIdx[i]]=true; }
+    } else {
+      for(var i2=0;i2<idxs.length;i2++){
+        var ee=state.drawing.entities[idxs[i2]];
+        for(var k=0;k<ee.pts.length;k++){ ee.pts[k].x+=dx; ee.pts[k].y+=dy; }
+      }
+    }
+  }
+  function applyRotate(angleDeg, base, asCopy){
+    snapshot();
+    var ang=angleDeg*Math.PI/180;
+    var cos=Math.cos(ang), sin=Math.sin(ang);
+    var idxs=selectionIndices();
+    var i,j;
+    if(asCopy){
+      var newIdx=[];
+      for(i=0;i<idxs.length;i++){
+        var e=state.drawing.entities[idxs[i]], pts=[];
+        for(j=0;j<e.pts.length;j++){
+          var px=e.pts[j].x-base.x, py=e.pts[j].y-base.y;
+          pts.push({x:base.x + px*cos - py*sin, y:base.y + px*sin + py*cos});
+        }
+        state.drawing.entities.push({type:e.type, pts:pts, closed:e.closed, layer:e.layer, color:e.color}); newIdx.push(state.drawing.entities.length-1);
+      }
+      state.drawing.selection={}; for(i=0;i<newIdx.length;i++){ state.drawing.selection[newIdx[i]]=true; }
+    } else {
+      for(i=0;i<idxs.length;i++){
+        var e2=state.drawing.entities[idxs[i]];
+        for(j=0;j<e2.pts.length;j++){
+          var qx=e2.pts[j].x-base.x, qy=e2.pts[j].y-base.y;
+          e2.pts[j].x = base.x + qx*cos - qy*sin;
+          e2.pts[j].y = base.y + qx*sin + qy*cos;
+        }
+      }
+    }
+  }
+  function applyScale(fac, base, asCopy){
+    snapshot();
+    var idxs=selectionIndices();
+    var i,j;
+    if(asCopy){
+      var newIdx=[];
+      for(i=0;i<idxs.length;i++){
+        var e=state.drawing.entities[idxs[i]], pts=[];
+        for(j=0;j<e.pts.length;j++){
+          var px=e.pts[j].x-base.x, py=e.pts[j].y-base.y;
+          pts.push({x:base.x + px*fac, y:base.y + py*fac});
+        }
+        state.drawing.entities.push({type:e.type, pts:pts, closed:e.closed, layer:e.layer, color:e.color}); newIdx.push(state.drawing.entities.length-1);
+      }
+      state.drawing.selection={}; for(i=0;i<newIdx.length;i++){ state.drawing.selection[newIdx[i]]=true; }
+    } else {
+      for(i=0;i<idxs.length;i++){
+        var e2=state.drawing.entities[idxs[i]];
+        for(j=0;j<e2.pts.length;j++){
+          var qx=e2.pts[j].x-base.x, qy=e2.pts[j].y-base.y;
+          e2.pts[j].x = base.x + qx*fac;
+          e2.pts[j].y = base.y + qy*fac;
+        }
+      }
+    }
+  }
+  function firstSelectedPoint(){
+    var idxs=selectionIndices();
+    if(!idxs.length) return null;
+    var e=state.drawing.entities[idxs[0]];
+    return e && e.pts && e.pts[0] ? {x:e.pts[0].x, y:e.pts[0].y} : null;
+  }
+  function eraseSelection(){
+    var idxs=selectionIndices(); if(!idxs.length) return;
+    snapshot();
+    var keep=[], i;
+    for(i=0;i<state.drawing.entities.length;i++){
+      if(state.drawing.selection[i]) continue;
+      keep.push(state.drawing.entities[i]);
+    }
+    state.drawing.entities=keep; clearSelection(); draw();
+  }
+
+  document.getElementById('tb-select').onclick=function(){ setMode('select'); activateBtn('tb-select'); state.action=null; };
+  document.getElementById('tb-line').onclick=function(){ startCmd('line'); };
+  document.getElementById('tb-poly').onclick=function(){ startCmd('pline'); };
+  document.getElementById('tb-rect').onclick=function(){ startCmd('rect'); };
+  document.getElementById('tb-circle').onclick=function(){ startCmd('circle'); };
+  document.getElementById('tb-move').onclick=function(){ startCmd('move'); };
+  document.getElementById('tb-copy').onclick=function(){ startCmd('copy'); };
+  document.getElementById('tb-rotate').onclick=function(){ startCmd('rotate'); };
+  document.getElementById('tb-scale').onclick=function(){ startCmd('scale'); };
+  document.getElementById('tb-erase').onclick=function(){ startCmd('erase'); };
+  document.getElementById('tb-pan').onclick=function(){ setMode('pan'); activateBtn('tb-pan'); };
+  document.getElementById('tb-zoom-win').onclick=function(){ state.action={type:'zoomwin',stage:0}; activateBtn('tb-zoom-win'); };
+  document.getElementById('tb-zoom-prev').onclick=function(){ zoomPrevious(); };
+  document.getElementById('tb-zoom-ext').onclick=function(){ zoomExtents(); };
+
+  document.getElementById('openBtn').onclick=function(){ document.getElementById('fileInput').click(); };
+  document.getElementById('saveBtn').onclick=function(){ saveJSON(); };
+  document.getElementById('saveDxfBtn').onclick=function(){ saveDXF(); };
+  document.getElementById('fileInput').addEventListener('change', onOpenFile);
+  document.getElementById('showGrid').addEventListener('change', function(e){ state.showGrid=e.target.checked; draw(); });
+  document.getElementById('snapGrid').addEventListener('change', function(e){ state.snaps.grid=e.target.checked; draw(); });
+  document.getElementById('snapEnds').addEventListener('change', function(e){ state.snaps.ends=e.target.checked; draw(); });
+  document.getElementById('snapMids').addEventListener('change', function(e){ state.snaps.mids=e.target.checked; draw(); });
+  document.getElementById('snapInters').addEventListener('change', function(e){ state.snaps.inters=e.target.checked; draw(); });
+  document.getElementById('orthoLock').addEventListener('change', function(e){ state.ortho=e.target.checked; });
+  document.getElementById('gridStep').addEventListener('change', function(e){ var v=parseFloat(e.target.value); if(isFinite(v)&&v>0) state.grid.step=v; draw(); });
+  document.getElementById('forceRedraw').onclick=function(){ setCanvasSize(); draw(); };
+  document.getElementById('resetView').onclick=function(){ var r=canvas.getBoundingClientRect(); state.scale=1; state.ox=r.width/2; state.oy=r.height/2; draw(); };
+  document.getElementById('testPattern').onclick=function(){ snapshot(); var s=50; state.drawing.entities.push({type:'poly', pts:[{x:0,y:0},{x:200,y:0},{x:200,y:200},{x:0,y:200},{x:0,y:0}], closed:true, layer:state.currentLayer}); draw(); };
+
+  function rebuildLayerUI(){
+    var sel = document.getElementById('layerSelect');
+    var propSel=document.getElementById('propLayer');
+    sel.innerHTML=''; propSel.innerHTML='';
+    var i, opt;
+    for(i=0;i<state.layers.length;i++){
+      opt=document.createElement('option'); opt.value=state.layers[i].name; opt.textContent=state.layers[i].name + (state.layers[i].visible===false?' (hidden)':''); sel.appendChild(opt);
+      opt=document.createElement('option'); opt.value=state.layers[i].name; opt.textContent=state.layers[i].name; propSel.appendChild(opt);
+    }
+    sel.value=state.currentLayer;
+    propSel.value=state.currentLayer;
+  }
+  function ensureLayer(name, color){
+    var i; for(i=0;i<state.layers.length;i++){ if(state.layers[i].name===name) return state.layers[i]; }
+    var L={name:name||'0', color:color||'#e0e6ff', visible:true}; state.layers.push(L); rebuildLayerUI(); return L;
+  }
+  function ensureLayersFromEntities(){
+    var seen={}, i;
+    for(i=0;i<state.drawing.entities.length;i++){ seen[state.drawing.entities[i].layer||'0']=true; }
+    for(var k in seen){ if(seen.hasOwnProperty(k)) ensureLayer(k); }
+  }
+  document.getElementById('layerSelect').addEventListener('change', function(e){ state.currentLayer=e.target.value; });
+  document.getElementById('addLayerBtn').onclick=function(){
+    var name=document.getElementById('newLayerName').value || ('Layer'+(state.layers.length));
+    var color=document.getElementById('newLayerColor').value || '#e0e6ff';
+    ensureLayer(name, color); state.currentLayer=name; rebuildLayerUI();
+  };
+  document.getElementById('toggleLayerBtn').onclick=function(){
+    var cur=currentLayerObj(); if(!cur) return; cur.visible = !cur.visible; rebuildLayerUI(); draw();
+  };
+  document.getElementById('delLayerBtn').onclick=function(){
+    if(state.currentLayer==='0') return;
+    var keep=[], i;
+    for(i=0;i<state.layers.length;i++){ if(state.layers[i].name!==state.currentLayer) keep.push(state.layers[i]); }
+    for(i=0;i<state.drawing.entities.length;i++){ if(state.drawing.entities[i].layer===state.currentLayer) state.drawing.entities[i].layer='0'; }
+    state.layers=keep; state.currentLayer='0'; rebuildLayerUI(); draw();
+  };
+  document.getElementById('applyProps').onclick=function(){
+    var newLayer=document.getElementById('propLayer').value;
+    var newColor=document.getElementById('propColor').value;
+    ensureLayer(newLayer);
+    var idxs=selectionIndices();
+    if(!idxs.length) return;
+    snapshot();
+    for(var i=0;i<idxs.length;i++){
+      var e=state.drawing.entities[idxs[i]];
+      e.layer=newLayer; e.color=newColor;
+    }
+    draw();
+  };
+
+  function saveJSON(){
+    var payload={entities:state.drawing.entities, layers:state.layers, currentLayer:state.currentLayer};
+    download('drawing.json', JSON.stringify(payload));
+  }
+  function saveDXF(){ var dxf=toDXF(state.drawing.entities); download('drawing.dxf', dxf); }
+  function onOpenFile(e){
+    var file=e.target.files[0]; if(!file) return;
+    var name=file.name.toLowerCase();
+    var rd=new FileReader();
+    rd.onload=function(){
+      try{
+        var text=rd.result;
+        if(name.indexOf('.json')>=0){
+          var data=JSON.parse(text);
+          if(data.layers){ state.layers=data.layers; state.currentLayer=data.currentLayer||'0'; }
+          state.drawing.entities=Array.isArray(data.entities)? data.entities: [];
+          ensureLayersFromEntities(); rebuildLayerUI(); clearSelection(); draw();
+        } else if(name.indexOf('.dxf')>=0 || name.indexOf('.txt')>=0){
+          var ents = parseDXF(text);
+          state.drawing.entities = ents;
+          ensureLayersFromEntities(); rebuildLayerUI(); clearSelection(); draw();
+        } else { alert('Unsupported file type.'); }
+      }catch(err2){ showErr(err2.stack||err2); alert('Failed to open file: '+err2.message); }
+    };
+    rd.readAsText(file);
+    e.target.value='';
+  }
+  function toDXF(entities){
+    var out=''; function w(code,val){ out+=code+'\\n'+String(val)+'\\n'; }
+    w(0,'SECTION'); w(2,'HEADER'); w(9,'$ACADVER'); w(1,'AC1009'); w(0,'ENDSEC');
+    w(0,'SECTION'); w(2,'TABLES'); w(0,'ENDSEC');
+    w(0,'SECTION'); w(2,'ENTITIES');
+    for(var i=0;i<entities.length;i++){
+      var e=entities[i];
+      if(e.type==='poly'){
+        for(var j=0;j<e.pts.length-1;j++){
+          var a=e.pts[j], b=e.pts[j+1];
+          w(0,'LINE'); w(8, e.layer || '0');
+          w(10,a.x); w(20,a.y); w(30,0); w(11,b.x); w(21,b.y); w(31,0);
+        }
+        if(e.closed && e.pts.length>1){
+          var a2=e.pts[e.pts.length-1], b2=e.pts[0];
+          w(0,'LINE'); w(8,e.layer||'0');
+          w(10,a2.x); w(20,a2.y); w(30,0); w(11,b2.x); w(21,b2.y); w(31,0);
+        }
+      }
+    }
+    w(0,'ENDSEC'); w(0,'EOF'); return out;
+  }
+  function parseDXF(text){
+    var lines = text.replace(/\\r\\n/g,'\\n').split(/\\n/);
+    var pairs = [];
+    for(var i=0;i<lines.length-1;i+=2){
+      var code = lines[i].trim();
+      var val = (lines[i+1]!==undefined) ? lines[i+1].replace(/\\r/g,'') : '';
+      if(code==='') continue;
+      pairs.push([parseInt(code,10), val]);
+    }
+    var entities=[];
+    var inEntities=false;
+    var cur=null;
+    for(var k=0;k<pairs.length;k++){
+      var c=pairs[k][0], v=pairs[k][1];
+      if(c===0 && v==='SECTION'){
+        if(pairs[k+1] && pairs[k+1][0]===2 && pairs[k+1][1]==='ENTITIES'){ inEntities=true; k++; continue; }
+      }
+      if(c===0 && v==='ENDSEC'){ inEntities=false; }
+      if(!inEntities) continue;
+      if(c===0 && v==='LINE'){
+        cur={layer:'0', x1:0,y1:0,x2:0,y2:0};
+      } else if(cur){
+        if(c===8) cur.layer=v;
+        else if(c===10) cur.x1=parseFloat(v);
+        else if(c===20) cur.y1=parseFloat(v);
+        else if(c===11) cur.x2=parseFloat(v);
+        else if(c===21) cur.y2=parseFloat(v);
+        else if(c===0){ entities.push(cur); cur=null; }
+      }
+      if(cur && ( (pairs[k+1] && pairs[k+1][0]===0) || k===pairs.length-1 )){ entities.push(cur); cur=null; }
+    }
+    var nodes={}, key=function(x,y){ return Math.round(x*1e6)+':'+Math.round(y*1e6); };
+    var q, L, k1, k2, n1, n2, edge;
+    for(q=0;q<entities.length;q++){
+      L=entities[q];
+      k1=key(L.x1,L.y1); k2=key(L.x2,L.y2);
+      if(!nodes[k1]) nodes[k1]={x:L.x1,y:L.y1,edges:[]};
+      if(!nodes[k2]) nodes[k2]={x:L.x2,y:L.y2,edges:[]};
+      n1=nodes[k1]; n2=nodes[k2];
+      edge={a:n1,b:n2,used:false,layer:L.layer||'0'};
+      n1.edges.push(edge); n2.edges.push(edge);
+    }
+    var polys=[], nid, n, eIdx, e, path, curNode, prev, nextEdge, nextNode;
+    for(nid in nodes){
+      if(!nodes.hasOwnProperty(nid)) continue;
+      n=nodes[nid];
+      for(eIdx=0;eIdx<n.edges.length;eIdx++){
+        e=n.edges[eIdx];
+        if(e.used) continue;
+        path=[{x:e.a.x,y:e.a.y},{x:e.b.x,y:e.b.y}];
+        e.used=true;
+        curNode=e.b; prev=e.a;
+        while(true){
+          nextEdge=null;
+          for(var t=0;t<curNode.edges.length;t++){
+            var ed=curNode.edges[t];
+            if(ed.used) continue;
+            if((ed.a===curNode && ed.b!==prev) || (ed.b===curNode && ed.a!==prev)){ nextEdge=ed; break; }
+          }
+          if(!nextEdge) break;
+          nextEdge.used=true;
+          nextNode = (nextEdge.a===curNode)? nextEdge.b : nextEdge.a;
+          path.push({x:nextNode.x,y:nextNode.y});
+          prev=curNode; curNode=nextNode;
+        }
+        polys.push({type:'poly', pts:path, closed:false, layer:e.layer||'0'});
+      }
+    }
+    return polys;
+  }
+  function download(filename, text){
+    var blob=new Blob([text], {type:'text/plain'});
+    var a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=filename; document.body.appendChild(a); a.click();
+    setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); }, 0);
+  }
+  function addCircleAsPoly(center,r, layer, color){
+    var N=64, pts=[];
+    for(var i=0;i<N;i++){ var ang=i/N*2*Math.PI; pts.push({x:center.x+r*Math.cos(ang), y:center.y+r*Math.sin(ang)}); }
+    state.drawing.entities.push({type:'poly', pts:pts, closed:true, layer:layer||state.currentLayer, color:color||null});
+  }
+  function zoomExtents(){
+    if(state.drawing.entities.length===0) return;
+    state.viewPrev={ox:state.ox,oy:state.oy,scale:state.scale};
+    var xmin=1e20,xmax=-1e20,ymin=1e20,ymax=-1e20;
+    for(var i=0;i<state.drawing.entities.length;i++){
+      var e=state.drawing.entities[i]; if(!entVisible(e)) continue;
+      for(var j=0;j<e.pts.length;j++){
+        var p=e.pts[j];
+        if(p.x<xmin) xmin=p.x; if(p.x>xmax) xmax=p.x;
+        if(p.y<ymin) ymin=p.y; if(p.y>ymax) ymax=p.y;
+      }
+    }
+    if(!(xmax>xmin && ymax>ymin)) return;
+    var pad=20/state.scale; xmin-=pad; xmax+=pad; ymin-=pad; ymax+=pad;
+    var rect=canvas.getBoundingClientRect(); var sx=rect.width/(xmax-xmin), sy=rect.height/(ymax-ymin);
+    state.scale=Math.min(sx,sy);
+    var s=w2s(xmin,ymax); state.ox -= (s.x-0); state.oy -= (s.y-0); draw();
+  }
+  function zoomPrevious(){ if(!state.viewPrev) return; var v=state.viewPrev; state.viewPrev={ox:state.ox,oy:state.oy,scale:state.scale}; state.ox=v.ox; state.oy=v.oy; state.scale=v.scale; draw(); }
+  function doZoomWindowPx(p0,p1){
+    state.viewPrev={ox:state.ox,oy:state.oy,scale:state.scale};
+    var a=s2w(p0.x,p0.y), b=s2w(p1.x,p1.y);
+    var xmin=Math.min(a.x,b.x), xmax=Math.max(a.x,b.x);
+    var ymin=Math.min(a.y,b.y), ymax=Math.max(a.y,b.y);
+    if(!(xmax>xmin && ymax>ymin)) return;
+    var rect=canvas.getBoundingClientRect(); var sx=rect.width/(xmax-xmin), sy=rect.height/(ymax-ymin);
+    state.scale=Math.min(sx,sy);
+    var s=w2s(xmin,ymax); state.ox -= (s.x-0); state.oy -= (s.y-0); draw();
+  }
+
+  window.addEventListener('resize', function(){ setCanvasSize(); });
+  if(document.readyState==='loading'){ document.addEventListener('DOMContentLoaded', function(){ setCanvasSize(); draw(); rebuildLayerUI(); }); }
+  else { setCanvasSize(); draw(); rebuildLayerUI(); }
+  setTimeout(function(){ setCanvasSize(); draw(); }, 0);
+
+})();</script>
+</body>
+</html>
