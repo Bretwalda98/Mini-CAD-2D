@@ -35,7 +35,7 @@
   #appbar{grid-area:appbar; background:var(--bar)}
   #titlebar{grid-area:titlebar; background:var(--bar2)}
   #ribbon{grid-area:ribbon; background:var(--panel); border-bottom:1px solid var(--stroke); overflow:hidden}
-  #fileTabs{grid-area:filetabs; background:#0d1223; border-bottom:1px solid var(--stroke); display:flex; align-items:end; gap:.25rem; padding:0 .5rem}
+  #fileTabs{grid-area:filetabs; background:#0d1223; border-bottom:1px solid var(--stroke); display:flex; align-items:end; gap:.25rem; padding:0 .5rem; overflow-x:auto}
   .app-button{width:28px; height:28px; background:#b61c1c; color:#fff; border:none; border-radius:4px; font-weight:700; cursor:pointer}
   .qat{display:flex; align-items:center; gap:.35rem; margin-left:.4rem}
   .qat button{height:26px; padding:0 .5rem; border:1px solid #263050; background:#171c2b; color:#e8ecf1; border-radius:.35rem; font-size:.85rem; cursor:pointer}
@@ -56,10 +56,10 @@
   .tool-btn{min-width:44px; height:34px; background:#161c32; color:#dfe7ff; border:1px solid #2c3861; border-radius:.4rem; cursor:pointer; font-size:.8rem; padding:0 .5rem}
   .tool-btn.active{outline:2px solid var(--accent)}
 
-  .file-tab{height:26px; display:flex; align-items:center; padding:0 .6rem; background:#151a31; color:#dce6ff; border:1px solid #273056; border-bottom:none; border-top-left-radius:.4rem; border-top-right-radius:.4rem}
+  .file-tab{height:26px; display:flex; align-items:center; padding:0 .6rem; background:#151a31; color:#dce6ff; border:1px solid #273056; border-bottom:none; border-top-left-radius:.4rem; border-top-right-radius:.4rem; cursor:pointer; gap:.35rem}
   .file-tab.current{background:#10162c; font-weight:600}
-  .file-tab .dirty{margin-left:.4rem; color:#f7c94b}
-  .file-plus{margin-left:auto; height:24px; width:24px; display:grid; place-items:center; border:1px dashed #2a3358; border-radius:.35rem; cursor:pointer}
+  .file-tab .dirty{margin-left:.1rem; color:#f7c94b}
+  .file-plus{margin-left:auto; height:24px; width:24px; display:grid; place-items:center; border:1px dashed #2a3358; border-radius:.35rem; cursor:pointer; flex:0 0 auto}
 
   #drawing{grid-area:drawing; position:relative; background:#0a0d16}
   canvas{display:block; width:100%; height:100%; background:transparent; touch-action:none; cursor:none}
@@ -206,7 +206,6 @@
           <button class="tool-btn" id="tb-mirror"  title="Mirror (MI)">Mirror</button>
           <button class="tool-btn" id="tb-offset"  title="Offset (O)">Offset</button>
           <button class="tool-btn" id="tb-stretch" title="Stretch (S)">Stretch</button>
-          <button class="tool-btn" id="tb-chamfer" title="Chamfer (CHA)">Chamfer</button>
           <button class="tool-btn" id="tb-move"    title="Move (M)">Move</button>
           <button class="tool-btn" id="tb-copy"    title="Copy (CO)">Copy</button>
           <button class="tool-btn" id="tb-rotate"  title="Rotate (RO)">Rot</button>
@@ -244,9 +243,8 @@
   </div>
 
   <div id="fileTabs">
-    <div class="file-tab current">Start</div>
-    <div class="file-tab current">Drawing1* <span class="dirty">•</span></div>
-    <div class="file-plus" title="New drawing">＋</div>
+    <!-- built dynamically -->
+    <div class="file-plus" id="addDocBtn" title="New drawing">＋</div>
   </div>
 
   <div id="drawing">
@@ -345,7 +343,7 @@
 
   <div id="cliWrap">
     <div id="cliBar">
-      <input id="cmdInput" type="text" placeholder="Command: L, PL, A, C, REC, TR, PO, T, MI, O, S, CHA, M, CO, RO, SC, E, Z, BMAKE, BINS, EXPLODE, M2P, PROPERTIES" />
+      <input id="cmdInput" type="text" placeholder="Command: L, PL, A, C, REC, TR, PO, T, MI, O, S, CHA, M, CO, RO, SC, E, Z, BMAKE, BINS, EXPLODE, M2P, PROPERTIES, DIM, DIMA" />
       <span id="okpill2" class="pill"></span>
     </div>
     <div id="cmdHistory"></div>
@@ -411,9 +409,90 @@
     if(!ctx) throw new Error('2D canvas not available.');
     const dpr = Math.max(1, window.devicePixelRatio || 1);
     const H2 = (a,b)=>Math.sqrt(a*a+b*b);
+    const TAU = Math.PI*2;
+
+    /* ---------- Multi-doc management ---------- */
+    const docs = [];
+    let currentDocIndex = -1;
+    function emptyDoc(name){
+      return {
+        name: name || ('Drawing'+(docs.length+1)),
+        view:{scale:1, ox:0, oy:0},
+        layers:[{name:'0', color:'#e0e6ff', visible:true}],
+        currentLayer:'0',
+        blocks:{},
+        entities:[],
+        units:'unitless',
+        dirty:false
+      };
+    }
+    function captureFromState(){
+      return {
+        name: state.name,
+        view:{scale:state.scale, ox:state.ox, oy:state.oy},
+        layers: JSON.parse(JSON.stringify(state.layers)),
+        currentLayer: state.currentLayer,
+        blocks: JSON.parse(JSON.stringify(state.blocks)),
+        entities: JSON.parse(JSON.stringify(state.drawing.entities)),
+        units: state.units,
+        dirty: state.dirty
+      };
+    }
+    function applyToState(doc){
+      state.name = doc.name;
+      state.scale = doc.view.scale;
+      state.ox = doc.view.ox;
+      state.oy = doc.view.oy;
+      state.layers = JSON.parse(JSON.stringify(doc.layers));
+      state.currentLayer = doc.currentLayer;
+      state.blocks = JSON.parse(JSON.stringify(doc.blocks));
+      state.drawing.entities = JSON.parse(JSON.stringify(doc.entities));
+      state.units = doc.units || 'unitless';
+      state.dirty = doc.dirty || false;
+      rebuildLayerUI(); rebuildBlockUI(); clearSelection(); draw(); updateTitle();
+    }
+    function addDoc(){
+      if(currentDocIndex>=0){ docs[currentDocIndex] = captureFromState(); }
+      const nd = emptyDoc();
+      docs.push(nd);
+      currentDocIndex = docs.length-1;
+      applyToState(nd);
+      rebuildFileTabs();
+    }
+    function switchDoc(i){
+      if(i===currentDocIndex||i<0||i>=docs.length) return;
+      docs[currentDocIndex] = captureFromState();
+      currentDocIndex = i;
+      applyToState(docs[i]);
+      rebuildFileTabs();
+    }
+    function markDirty(){ state.dirty=true; if(currentDocIndex>=0){ docs[currentDocIndex].dirty=true; } rebuildFileTabs(); updateTitle(); }
+
+    const fileTabsEl = document.getElementById('fileTabs');
+    function rebuildFileTabs(){
+      // keep the + button at the end
+      const plus = document.getElementById('addDocBtn');
+      fileTabsEl.innerHTML='';
+      docs.forEach((d,idx)=>{
+        const tab=document.createElement('div');
+        tab.className='file-tab'+(idx===currentDocIndex?' current':'');
+        tab.innerHTML = `${d.name}${d.dirty?'<span class="dirty">•</span>':''}`;
+        tab.addEventListener('click', ()=>switchDoc(idx));
+        fileTabsEl.appendChild(tab);
+      });
+      fileTabsEl.appendChild(plus);
+    }
+    document.getElementById('addDocBtn').addEventListener('click', ()=>{
+      addDoc();
+    });
+
+    function updateTitle(){
+      document.getElementById('titleFile').textContent = 'Mini-CAD — '+(state.name || 'Drawing');
+    }
 
     /* ---------- Core State ---------- */
     const state = {
+      name:'Drawing1',
       scale: 1.0, ox: 0, oy: 0,
       mode: 'select',
       mouse: {x:0,y:0, wx:0, wy:0},
@@ -431,12 +510,35 @@
       lastCmd: '',
       dyn: {active:false, field:'len', lenStr:'', angStr:'', lastBase:null},
       pickOverride:null,
-      units:'unitless'
+      units:'unitless',
+      dirty:false
     };
 
     /* ---------- Ribbon engine ---------- */
     const ribbonBody = document.getElementById('ribbonBody');
     const HOME_HTML  = ribbonBody.innerHTML;
+
+    function renderAnnotateTab(){
+      const html = `
+        <div class="group" data-group="dims">
+          <div class="grow">
+            <button class="tool-btn" id="tb-dimlin" title="Linear Dimension (DIM)">Dim</button>
+            <button class="tool-btn" id="tb-dimang" title="Angular Dimension (DIMA)">DimA</button>
+            <button class="tool-btn" id="tb-text2" title="Text (T)">Text</button>
+          </div>
+          <div class="gtitle">Dimensions</div>
+        </div>
+        <div class="group">
+          <div class="grow" style="padding:.5rem;color:#cfe3ff">Pick two points for Linear Dim, then a third offset point. For Angular Dim: pick vertex, first arm, second arm, then a radius point.</div>
+          <div class="gtitle">How to</div>
+        </div>
+      `;
+      ribbonBody.innerHTML = html;
+      const q = sel=>document.querySelector(sel);
+      q('#tb-dimlin').onclick = ()=> startCmd('dim');
+      q('#tb-dimang').onclick = ()=> startCmd('dima');
+      q('#tb-text2').onclick  = ()=> startCmd('text');
+    }
 
     function renderPropertiesTab(){
       const html = `
@@ -491,6 +593,7 @@
         wireToolbarButtons();
         return;
       }
+      if(key==='annotate'){ renderAnnotateTab(); return; }
       if(key==='properties'){ renderPropertiesTab(); return; }
       renderPlaceholderTab(key.charAt(0).toUpperCase()+key.slice(1));
     }
@@ -502,49 +605,67 @@
       if(t && t.dataset && t.dataset.tab){ setActiveTab(t.dataset.tab); }
     });
 
-    /* ---------- HUD ---------- */
-    const hud = document.getElementById('hud');
-    const hudLen = document.getElementById('hudLen');
-    const hudAng = document.getElementById('hudAng');
-    const hudDXDY = document.getElementById('hudDXDY');
-    const hudSnap = document.getElementById('hudSnap');
 
-    /* ---------- Utils ---------- */
-    function setCanvasSize(){
-      const rect = canvas.getBoundingClientRect();
-      canvas.width = Math.max(100, Math.floor(rect.width * dpr));
-      canvas.height = Math.max(100, Math.floor(rect.height * dpr));
-      ctx.setTransform(dpr,0,0,dpr,0,0);
-      if(state.ox===0 && state.oy===0){ state.ox=rect.width/2; state.oy=rect.height/2; state.scale=1.0; }
-      draw();
-    }
-    const w2s=(x,y)=>({x:x*state.scale+state.ox, y:-y*state.scale+state.oy});
-    const s2w=(sx,sy)=>({x:(sx-state.ox)/state.scale, y:-(sy-state.oy)/state.scale});
-    const fmt=v=>(Math.round(v*100)/100).toFixed(2);
-    const clamp=(v,a,b)=>Math.max(a, Math.min(b, v));
-    const css=name=>getComputedStyle(document.documentElement).getPropertyValue(name).trim() || '#888';
-    function currentLayerObj(){ return state.layers.find(L=>L.name===state.currentLayer) || state.layers[0]; }
-    function currentLayerColor(name){ return (state.layers.find(L=>L.name===name)||{}).color || '#e0e6ff'; }
+/* ---------- HUD ---------- */
+const hud = document.getElementById('hud');
+const hudLen = document.getElementById('hudLen');
+const hudAng = document.getElementById('hudAng');
+const hudDXDY = document.getElementById('hudDXDY');
+const hudSnap = document.getElementById('hudSnap');
+
+/* ---------- Utils ---------- */
+/* helpers used by draw() — must exist before we call setCanvasSize() -> draw() */
+const w2s = (x,y)=>({ x:x*state.scale+state.ox,     y:-y*state.scale+state.oy });
+const s2w = (sx,sy)=>({ x:(sx-state.ox)/state.scale, y:-(sy-state.oy)/state.scale });
+const fmt  = v => (Math.round(v*100)/100).toFixed(2);
+const clamp=(v,a,b)=>Math.max(a, Math.min(b, v));
+const css  = name => getComputedStyle(document.documentElement)
+                      .getPropertyValue(name).trim() || '#888';
+
+function setCanvasSize(){
+  const rect = canvas.getBoundingClientRect();
+  const w = Math.max(100, Math.floor(rect.width  * dpr));
+  const h = Math.max(100, Math.floor(rect.height * dpr));
+  if (canvas.width !== w || canvas.height !== h) {
+    canvas.width = w;
+    canvas.height = h;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  if (state.ox === 0 && state.oy === 0) {
+    state.ox = rect.width / 2;
+    state.oy = rect.height / 2;
+    state.scale = 1.0;
+  }
+  draw();
+}
+
+setCanvasSize();
+window.addEventListener('resize', setCanvasSize, { passive: true });
+
+function currentLayerObj(){ return state.layers.find(L=>L.name===state.currentLayer) || state.layers[0]; }
+function currentLayerColor(name){ return (state.layers.find(L=>L.name===name)||{}).color || '#e0e6ff'; }
+function unitsSuffix(){ return state.units==='unitless' ? '' : ' '+state.units; }
 
     /* ---------- History ---------- */
     function snapshot(){
       state.history.push(JSON.stringify({entities:state.drawing.entities, layers:state.layers, currentLayer:state.currentLayer, blocks:state.blocks}));
       if(state.history.length>200) state.history.shift();
       state.future.length=0;
+      markDirty();
     }
     function undo(){
       if(!state.history.length) return;
       state.future.push(JSON.stringify({entities:state.drawing.entities, layers:state.layers, currentLayer:state.currentLayer, blocks:state.blocks}));
       const d=JSON.parse(state.history.pop());
       state.drawing.entities=d.entities||[]; state.layers=d.layers||state.layers; state.currentLayer=d.currentLayer||'0'; state.blocks=d.blocks||{};
-      rebuildLayerUI(); rebuildBlockUI(); clearSelection(); draw();
+      rebuildLayerUI(); rebuildBlockUI(); clearSelection(); draw(); markDirty();
     }
     function redo(){
       if(!state.future.length) return;
       state.history.push(JSON.stringify({entities:state.drawing.entities, layers:state.layers, currentLayer:state.currentLayer, blocks:state.blocks}));
       const d=JSON.parse(state.future.pop());
       state.drawing.entities=d.entities||[]; state.layers=d.layers||state.layers; state.currentLayer=d.currentLayer||'0'; state.blocks=d.blocks||{};
-      rebuildLayerUI(); rebuildBlockUI(); clearSelection(); draw();
+      rebuildLayerUI(); rebuildBlockUI(); clearSelection(); draw(); markDirty();
     }
 
     /* ---------- Rendering ---------- */
@@ -607,14 +728,30 @@
       else if(e.ltype==='DOTTED'){ ctx.setLineDash([2,6]); }
       else { ctx.setLineDash([]); }
     }
+
+    function drawArrowHead(px,py, ang, size){
+      const s = size||8;
+      const a1 = ang + Math.PI*0.85, a2 = ang - Math.PI*0.85;
+      ctx.beginPath();
+      ctx.moveTo(px,py);
+      ctx.lineTo(px + s*Math.cos(a1), py + s*Math.sin(a1));
+      ctx.moveTo(px,py);
+      ctx.lineTo(px + s*Math.cos(a2), py + s*Math.sin(a2));
+      ctx.stroke();
+    }
+
     function drawEntities(){
       ctx.lineCap='round'; ctx.lineJoin='round';
       for(let i=0;i<state.drawing.entities.length;i++){
         const e = state.drawing.entities[i];
         if(!entVisible(e)) continue;
+
         if(e.type==='blockref'){ drawBlockRef(e); continue; }
         if(e.type==='text'){ drawTextEnt(e); continue; }
         if(e.type==='point'){ drawPointEnt(e); continue; }
+        if(e.type==='dim'){ drawDimLinear(e); continue; }
+        if(e.type==='adim'){ drawDimAngular(e); continue; }
+
         strokeFor(e);
         ctx.beginPath();
         for(let j=0;j<e.pts.length;j++){
@@ -650,6 +787,96 @@
       ctx.stroke();
       ctx.restore();
     }
+
+    function drawDimLinear(d){
+      const A=d.a, B=d.b, off=d.offset||30;
+      const vx=B.x-A.x, vy=B.y-A.y;
+      const L = Math.hypot(vx,vy)||1;
+      const nx = -vy/L, ny = vx/L; // normal
+      const A2 = {x:A.x+nx*off, y:A.y+ny*off};
+      const B2 = {x:B.x+nx*off, y:B.y+ny*off};
+      const sA=w2s(A2.x,A2.y), sB=w2s(B2.x,B2.y);
+      const sEA=w2s(A.x,A.y), sEB=w2s(B.x,B.y);
+
+      ctx.save();
+      ctx.setLineDash([]);
+      ctx.strokeStyle = d.color || currentLayerColor(d.layer) || '#e0e6ff';
+      ctx.lineWidth = 1.2;
+
+      // extension lines
+      ctx.beginPath();
+      ctx.moveTo(sEA.x, sEA.y); ctx.lineTo(sA.x, sA.y);
+      ctx.moveTo(sEB.x, sEB.y); ctx.lineTo(sB.x, sB.y);
+      ctx.stroke();
+
+      // dimension line
+      ctx.beginPath(); ctx.moveTo(sA.x,sA.y); ctx.lineTo(sB.x,sB.y); ctx.stroke();
+
+      // arrows
+      const ang = Math.atan2(sB.y-sA.y, sB.x-sA.x);
+      drawArrowHead(sA.x,sA.y, ang+Math.PI, 8);
+      drawArrowHead(sB.x,sB.y, ang, 8);
+
+      // text
+      const mid={x:(A2.x+B2.x)/2, y:(A2.y+B2.y)/2};
+      const sM=w2s(mid.x, mid.y);
+      const txt = (Math.round(L*100)/100).toFixed(2)+unitsSuffix();
+      const px = (Math.max(10, 14*state.scale/2)|0);
+      ctx.fillStyle = ctx.strokeStyle;
+      ctx.font = px+'px Arial';
+      ctx.textAlign='center';
+      ctx.textBaseline='bottom';
+      ctx.fillText(txt, sM.x, sM.y-4);
+      ctx.restore();
+    }
+
+    function drawDimAngular(d){
+      const C=d.c, A=d.a, B=d.b, r=d.r||40;
+      const a1=Math.atan2(A.y-C.y, A.x-C.x);
+      const a2=Math.atan2(B.y-C.y, B.x-C.x);
+      let ang1=a1, ang2=a2;
+      // normalize sweep to smallest positive arc
+      let sweep = ang2-ang1;
+      while(sweep<=-Math.PI) sweep+=TAU;
+      while(sweep>Math.PI) sweep-=TAU;
+      if(sweep<0){ const tmp=ang1; ang1=ang2; ang2=tmp; sweep=-sweep; }
+
+      const steps = Math.max(24, Math.min(80, Math.round(sweep/(Math.PI/90))));
+      ctx.save();
+      ctx.strokeStyle = d.color || currentLayerColor(d.layer) || '#e0e6ff';
+      ctx.lineWidth=1.2;
+      ctx.beginPath();
+      for(let k=0;k<=steps;k++){
+        const t=ang1 + sweep*(k/steps);
+        const p=w2s(C.x + r*Math.cos(t), C.y + r*Math.sin(t));
+        if(k===0) ctx.moveTo(p.x,p.y); else ctx.lineTo(p.x,p.y);
+      }
+      ctx.stroke();
+
+      // arrows
+      const p1=w2s(C.x + r*Math.cos(ang1), C.y + r*Math.sin(ang1));
+      const p2=w2s(C.x + r*Math.cos(ang2), C.y + r*Math.sin(ang2));
+      drawArrowHead(p1.x,p1.y, ang1-Math.PI/2, 8);
+      drawArrowHead(p2.x,p2.y, ang2+Math.PI/2, 8);
+
+      // legs
+      const l1=w2s(C.x, C.y), lA=w2s(A.x, A.y), lB=w2s(B.x,B.y);
+      ctx.beginPath(); ctx.moveTo(l1.x,l1.y); ctx.lineTo(lA.x,lA.y); ctx.moveTo(l1.x,l1.y); ctx.lineTo(lB.x,lB.y); ctx.stroke();
+
+      // text
+      const midAng = ang1 + sweep/2;
+      const tpos = w2s(C.x + (r+12)*Math.cos(midAng), C.y + (r+12)*Math.sin(midAng));
+      const deg = (sweep*180/Math.PI);
+      const txt = (Math.round(deg*100)/100).toFixed(2)+'°';
+      const px = (Math.max(10, 14*state.scale/2)|0);
+      ctx.fillStyle = ctx.strokeStyle;
+      ctx.font = px+'px Arial';
+      ctx.textAlign='center';
+      ctx.textBaseline='middle';
+      ctx.fillText(txt, tpos.x, tpos.y);
+      ctx.restore();
+    }
+
     function drawBlockRef(br){
       const blk=state.blocks[br.ref]; if(!blk) return;
       const col = br.color || currentLayerColor(br.layer) || '#e0e6ff';
@@ -738,6 +965,8 @@
           if(e.type==='blockref'){ snapBlockEnds(e, trySnap); }
           else if(e.type==='poly'){ for(j=0;j<e.pts.length;j++){ trySnap(e.pts[j].x, e.pts[j].y, 'end'); } }
           else if(e.type==='point'){ trySnap(e.pos.x,e.pos.y,'end'); }
+          else if(e.type==='dim'){ trySnap(e.a.x,e.a.y,'end'); trySnap(e.b.x,e.b.y,'end'); }
+          else if(e.type==='adim'){ trySnap(e.c.x,e.c.y,'end'); trySnap(e.a.x,e.a.y,'end'); trySnap(e.b.x,e.b.y,'end'); }
         }
       }
       if((state.snaps.mids && !override) || override==='mid'){
@@ -745,6 +974,7 @@
           e=state.drawing.entities[i]; if(!entVisible(e)) continue;
           if(e.type==='blockref'){ snapBlockMids(e, trySnap); }
           else if(e.type==='poly'){ for(j=0;j<e.pts.length-1;j++){ trySnap((e.pts[j].x+e.pts[j+1].x)/2, (e.pts[j].y+e.pts[j+1].y)/2, 'mid'); } }
+          else if(e.type==='dim'){ trySnap((e.a.x+e.b.x)/2,(e.a.y+e.b.y)/2,'mid'); }
         }
       }
       if(((state.snaps.inters && !override) || override==='int')){
@@ -764,9 +994,18 @@
     }
     function collectNearSegments(sx,sy,pix){
       const res=[]; let i,j,e,a,b,sa,sb,d;
+      function addSeg(a,b){ res.push({a:a,b:b}); }
       for(i=0;i<state.drawing.entities.length;i++){
         e=state.drawing.entities[i]; if(!entVisible(e)) continue;
         if(e.type==='blockref'){ collectBlockSegments(e,res,sx,sy,pix); continue; }
+        if(e.type==='dim'){
+          // use dim line
+          const seg = dimLineSegment(e);
+          const sa=w2s(seg.a.x,seg.a.y), sb=w2s(seg.b.x,seg.b.y);
+          d = distToSeg({x:sx,y:sy},sa,sb);
+          if(d<=pix) addSeg(seg.a,seg.b);
+          continue;
+        }
         if(e.type!=='poly') continue;
         for(j=0;j<e.pts.length-1;j++){
           a=e.pts[j]; b=e.pts[j+1];
@@ -839,6 +1078,13 @@
     function setSelected(i, on){ if(on) state.drawing.selection[i]=true; else delete state.drawing.selection[i]; updateSelInfo(); }
     function selectionIndices(){ const out=[]; for(const k in state.drawing.selection){ if(Object.prototype.hasOwnProperty.call(state.drawing.selection,k)) out.push(parseInt(k,10)); } return out.sort((a,b)=>a-b); }
     function updateSelInfo(){ const count=selectionIndices().length; document.getElementById('selInfo').textContent = count; }
+
+    function dimLineSegment(d){
+      const A=d.a, B=d.b, off=d.offset||30;
+      const vx=B.x-A.x, vy=B.y-A.y; const L=Math.hypot(vx,vy)||1;
+      const nx=-vy/L, ny=vx/L;
+      return {a:{x:A.x+nx*off,y:A.y+ny*off}, b:{x:B.x+nx*off,y:B.y+ny*off}};
+    }
 
     /* ---------- Dynamic Input HUD ---------- */
     function enableDyn(base){ state.dyn.active=true; state.dyn.field='len'; state.dyn.lenStr=''; state.dyn.angStr=''; state.dyn.lastBase=base; hud.style.display='block'; hudLen.className='active'; hudAng.className=''; }
@@ -946,7 +1192,8 @@
       return state.action && (
         state.action.type==='drawLine' || state.action.type==='drawPoly' ||
         state.action.type==='drawRect' || state.action.type==='drawCircle' ||
-        state.action.type==='arc3p' || state.action.type==='zoomwin'
+        state.action.type==='arc3p' || state.action.type==='zoomwin' ||
+        state.action.type==='dimlin' || state.action.type==='dimang'
       );
     }
     function selectionCount(){ return selectionIndices().length; }
@@ -954,21 +1201,18 @@
     function finishCurrent(){
       if(!state.action) return;
       if(state.action.type==='drawPoly' && state.action.pts.length>=2){
-        snapshot(); state.drawing.entities.push({type:'poly', pts:state.action.pts.slice(0), closed:false, layer:state.currentLayer});
-        state.action=null; disableDyn(); draw(); return;
+        snapshot(); state.drawing.entities.push({type:'poly', pts:state.action.pts.slice(0), closed:false, layer:state.currentLayer}); state.action=null; disableDyn(); draw(); return;
       }
       if(state.action.type==='drawLine' && state.action.pts && state.action.pts.length===2){
-        snapshot(); state.drawing.entities.push({type:'poly', pts:[state.action.pts[0], state.action.pts[1]], closed:false, layer:state.currentLayer});
-        state.action=null; disableDyn(); draw(); return;
+        snapshot(); state.drawing.entities.push({type:'poly', pts:[state.action.pts[0], state.action.pts[1]], closed:false, layer:state.currentLayer}); state.action=null; disableDyn(); draw(); return;
       }
-      if(state.action.type==='drawRect' || state.action.type==='drawCircle' || state.action.type==='arc3p'){ cancelAction(); return; }
+      if(state.action.type==='drawRect' || state.action.type==='drawCircle' || state.action.type==='arc3p' || state.action.type==='dimlin' || state.action.type==='dimang'){ cancelAction(); return; }
     }
     function undoLastVertex(){
       if(!state.action || !state.action.pts) return;
       if(state.action.pts.length>0){ state.action.pts.pop(); state.dyn.lastBase = state.action.pts[state.action.pts.length-1] || null; draw(); }
     }
 
-    // FIXED: no duplicate const names here
     function buildAutoCADStyleMenu(sx,sy){
       const hitIdx = hitIndexAtScreen(sx,sy);
       const hasSel = selectionCount()>0;
@@ -994,6 +1238,10 @@
         {label:'Make Block', accel:'B', action:()=>startCmd('bmake'), disabled:!hasSel},
         {label:'Insert Block', accel:'I', action:()=>startCmd('bins')},
         {label:'Explode', accel:'X', action:()=>startCmd('explode'), disabled:!hasSel}
+      ];
+      const annotGroup = [
+        {label:'Linear Dimension', accel:'DIM', action:()=>startCmd('dim')},
+        {label:'Angular Dimension', accel:'DIMA', action:()=>startCmd('dima')}
       ];
       const snapGroup = [
         {label:'Snap Grid', checked:snaps.grid, action:()=>{snaps.grid=!snaps.grid; draw();}},
@@ -1065,6 +1313,7 @@
           {label:'Draw',   submenu:drawGroup},
           {label:'Modify', submenu:modifyGroup, disabled:selectionCount()===0},
           {label:'Blocks', submenu:blockGroup},
+          {label:'Annotate', submenu:annotGroup},
           {label:'View',   submenu:viewGroup},
           {label:'Snaps',  submenu:snapGroup},
           {label:'Units',  submenu:unitsGroup},
@@ -1128,7 +1377,8 @@
         state.action.pts[1]=ptR;
         const a=state.action.pts[0], b=state.action.pts[1];
         const r=[{x:a.x,y:a.y},{x:b.x,y:a.y},{x:b.x,y:b.y},{x:a.x,y:b.y}];
-        snapshot(); state.drawing.entities.push({type:'poly', pts:r, closed:true, layer:state.currentLayer}); state.action=null; disableDyn(); draw(); return;
+        snapshot(); state.drawing.entities.push({type:'poly', pts:r, closed: true, layer:state.currentLayer});
+        state.action=null; disableDyn(); draw(); return;
       }
       if(state.mode==='circle'){
         if(!state.action){ state.action={type:'drawCircle', pts:[{x:w.x,y:w.y}]}; enableDyn(state.action.pts[0]); draw(); return; }
@@ -1136,6 +1386,35 @@
         const rawC={x:w.x,y:w.y}; const ptC=(state.dyn.active && state.dyn.lastBase)? applyDynFrom(state.dyn.lastBase, rawC) : rawC;
         const rad=H2(ptC.x-cen.x, ptC.y-cen.y);
         snapshot(); addCircleAsPoly(cen,rad, state.currentLayer, null); state.action=null; disableDyn(); draw(); return;
+      }
+
+      // Dimensions
+      if(state.mode==='dimlin'){
+        if(!state.action){ state.action={type:'dimlin', stage:0, a:null, b:null}; }
+        if(state.action.stage===0){ state.action.a={x:w.x,y:w.y}; state.action.stage=1; pushHistory('DIM: pick second point'); return; }
+        if(state.action.stage===1){ state.action.b={x:w.x,y:w.y}; state.action.stage=2; pushHistory('DIM: pick offset'); return; }
+        if(state.action.stage===2){
+          const A=state.action.a, B=state.action.b;
+          const vx=B.x-A.x, vy=B.y-A.y; const L=Math.hypot(vx,vy)||1;
+          const nx=-vy/L, ny=vx/L;
+          const off = (w.x-A.x)*nx + (w.y-A.y)*ny; // signed offset
+          snapshot();
+          state.drawing.entities.push({type:'dim', a:A, b:B, offset:off, layer:state.currentLayer});
+          state.action=null; draw(); return;
+        }
+      }
+      if(state.mode==='dimang'){
+        if(!state.action){ state.action={type:'dimang', stage:0}; }
+        if(state.action.stage===0){ state.action.c={x:w.x,y:w.y}; state.action.stage=1; pushHistory('DIMA: pick first arm point'); return; }
+        if(state.action.stage===1){ state.action.a={x:w.x,y:w.y}; state.action.stage=2; pushHistory('DIMA: pick second arm point'); return; }
+        if(state.action.stage===2){ state.action.b={x:w.x,y:w.y}; state.action.stage=3; pushHistory('DIMA: pick radius point'); return; }
+        if(state.action.stage===3){
+          const C=state.action.c;
+          const r = Math.hypot(w.x-C.x, w.y-C.y);
+          snapshot();
+          state.drawing.entities.push({type:'adim', c:state.action.c, a:state.action.a, b:state.action.b, r:r, layer:state.currentLayer});
+          state.action=null; draw(); return;
+        }
       }
     });
 
@@ -1158,7 +1437,7 @@
         const eidx=dragGrip.ei, vi=dragGrip.vi;
         const s=getSnap(w.x,w.y,x,y,state.pickOverride);
         const rawG = s? {x:s.x,y:s.y} : {x:w.x,y:w.y};
-        const ent=state.drawing.entities[eidx]; if(ent){ if(vi==='base'){ ent.pos=rawG; } else { ent.pts[vi]=rawG; } draw(); }
+        const ent=state.drawing.entities[eidx]; if(ent){ if(vi==='base'){ ent.pos=rawG; } else if(ent.type==='dim' && (vi==='a'||vi==='b')){ ent[vi]=rawG; } else { ent.pts && (ent.pts[vi]=rawG); } draw(); markDirty(); }
         return;
       }
 
@@ -1174,8 +1453,11 @@
             for(let j=0;j<e2.pts.length;j++){ const s2=w2s(e2.pts[j].x,e2.pts[j].y); if(s2.x<xMin||s2.x>xMax||s2.y<yMin||s2.y>yMax){ inside=false; break; } }
           } else if(e2.type==='blockref'){
             const sb=w2s(e2.pos.x,e2.pos.y); inside = !(sb.x<xMin||sb.x>xMax||sb.y<yMin||sb.y>yMax);
-          } else if(e2.type==='text' || e2.type==='point'){
-            const ss=w2s((e2.pos||{x:0}).x,(e2.pos||{y:0}).y); inside = !(ss.x<xMin||ss.x>xMax||ss.y<yMin||ss.y>yMax);
+          } else if(e2.type==='text' || e2.type==='point' || e2.type==='dim' || e2.type==='adim'){
+            const pp = e2.type==='dim' ? {x:(e2.a.x+e2.b.x)/2, y:(e2.a.y+e2.b.y)/2}
+                     : e2.type==='adim'? e2.c
+                     : (e2.pos||{x:0,y:0});
+            const ss=w2s(pp.x,pp.y); inside = !(ss.x<xMin||ss.x>xMax||ss.y<yMin||ss.y>yMax);
           }
           if(inside) setSelected(i,true);
         }
@@ -1226,6 +1508,19 @@
       const tol=10; let best=-1, bestD=1e9;
       for(let i=0;i<state.drawing.entities.length;i++){
         const e=state.drawing.entities[i]; if(!entVisible(e)) continue;
+        if(e.type==='dim'){
+          const seg = dimLineSegment(e);
+          const a=w2s(seg.a.x,seg.a.y), b=w2s(seg.b.x,seg.b.y);
+          const d=distToSeg({x:sx,y:sy},a,b);
+          if(d<tol && d<bestD){ bestD=d; best=i; }
+          continue;
+        }
+        if(e.type==='adim'){
+          const c=w2s(e.c.x,e.c.y);
+          const d0=H2(sx-c.x,sy-c.y);
+          if(d0<tol && d0<bestD){ bestD=d0; best=i; }
+          continue;
+        }
         if(e.type==='blockref'){
           const s=w2s(e.pos.x,e.pos.y);
           const d=H2(sx-s.x, sy-s.y);
@@ -1250,6 +1545,12 @@
       for(let i=0;i<state.drawing.entities.length;i++){
         if(!state.drawing.selection[i]) continue;
         const e=state.drawing.entities[i];
+        if(e.type==='dim'){
+          const sA=w2s(e.a.x,e.a.y), sB=w2s(e.b.x,e.b.y);
+          if(Math.abs(sx-sA.x)<=tol && Math.abs(sy-sA.y)<=tol) return {ei:i, vi:'a'};
+          if(Math.abs(sx-sB.x)<=tol && Math.abs(sy-sB.y)<=tol) return {ei:i, vi:'b'};
+          continue;
+        }
         if(e.type==='blockref'){
           const sb=w2s(e.pos.x,e.pos.y); if(Math.abs(sx-sb.x)<=tol && Math.abs(sy-sb.y)<=tol) return {ei:i, vi:'base'}; continue;
         }
@@ -1270,13 +1571,25 @@
     const cmdInput = document.getElementById('cmdInput');
     const cmdHistoryPane = document.getElementById('cmdHistory');
     const historyLines = [];
+    const cmdStack = [];
+    let cmdStackIdx = -1;
+
     function renderHistory(){ const last3 = historyLines.slice(-3); cmdHistoryPane.innerHTML = last3.map(line=>`<div class="hist-line">${line}</div>`).join(''); }
     function pushHistory(line){ historyLines.push(line); renderHistory(); }
     function setMode(m){ state.mode=m; document.getElementById('modeLbl').textContent=m.charAt(0).toUpperCase()+m.slice(1); draw(); }
     function activateBtn(id){ document.querySelectorAll('.tool-btn').forEach(b=>b.classList.remove('active')); const el=document.getElementById(id); if(el) el.classList.add('active'); }
 
+    function rememberCmd(raw){
+      if(!raw) return;
+      if(cmdStack.length===0 || cmdStack[cmdStack.length-1]!==raw){
+        cmdStack.push(raw);
+      }
+      cmdStackIdx = cmdStack.length;
+    }
+
     function startCmd(name){
       state.lastCmd=name; pushHistory(name.toUpperCase());
+      // Map to modes or actions
       if(name==='point'){ setMode('point'); activateBtn('tb-point'); cmdInput.value=''; return; }
       if(name==='text'){ setMode('text'); activateBtn('tb-text'); cmdInput.value=''; return; }
       if(name==='arc3p' || name==='arc'){ setMode('arc3p'); activateBtn('tb-arc'); cmdInput.value=''; return; }
@@ -1285,6 +1598,9 @@
       if(name==='rect'){ setMode('rect'); activateBtn('tb-rect'); cmdInput.value=''; return; }
       if(name==='circle'){ setMode('circle'); activateBtn('tb-circle'); cmdInput.value=''; return; }
       if(name==='trace'){ setMode('poly'); activateBtn('tb-trace'); cmdInput.value=''; return; }
+
+      if(name==='dim' || name==='dli'){ setMode('dimlin'); setActiveTab('annotate'); cmdInput.value=''; return; }
+      if(name==='dima' || name==='dimang'){ setMode('dimang'); setActiveTab('annotate'); cmdInput.value=''; return; }
 
       if(name==='move'){ ensureSelection(); state.action={type:'modify', kind:'move', stage:0}; activateBtn('tb-move'); return; }
       if(name==='copy'){ ensureSelection(); state.action={type:'modify', kind:'copy', stage:0}; activateBtn('tb-copy'); return; }
@@ -1310,6 +1626,8 @@
 
     function handleCmdEnter(txt){
       const t=(txt||'').trim().toLowerCase();
+      rememberCmd(t);
+
       if(state.action && state.action.type==='modify'){
         if(state.action.kind==='rotate'){ const ang=parseFloat(t); if(isFinite(ang)){ applyRotate(ang, state.action.base||{x:0,y:0}, false); state.action=null; draw(); pushHistory('Rotate '+ang+'°'); return; } }
         if(state.action.kind==='scale'){ const fac=parseFloat(t); if(isFinite(fac)){ applyScale(fac, state.action.base||{x:0,y:0}, false); state.action=null; draw(); pushHistory('Scale ×'+fac); return; } }
@@ -1341,6 +1659,8 @@
       if(t==='id'){ startCmd('id'); return; }
       if(t==='dist'){ startCmd('dist'); return; }
       if(t==='area'){ startCmd('area'); return; }
+      if(t==='dim' || t==='dli'){ startCmd('dim'); return; }
+      if(t==='dima' || t==='dimang'){ startCmd('dima'); return; }
 
       // Properties command: open tab and drawer
       if(t==='properties' || t==='prop' || t==='props'){
@@ -1350,9 +1670,14 @@
 
     cmdInput.addEventListener('keydown', function(e){
       if(e.key==='Enter'){ handleCmdEnter(cmdInput.value); cmdInput.value=''; }
-      if(e.key==='Escape'){ cancelAction(); }
+      else if(e.key==='ArrowUp'){
+        if(cmdStack.length){ cmdStackIdx = Math.max(0, cmdStackIdx-1); cmdInput.value = cmdStack[cmdStackIdx]; setTimeout(()=>cmdInput.setSelectionRange(cmdInput.value.length, cmdInput.value.length),0); e.preventDefault(); }
+      } else if(e.key==='ArrowDown'){
+        if(cmdStack.length){ cmdStackIdx = Math.min(cmdStack.length, cmdStackIdx+1); cmdInput.value = (cmdStackIdx>=cmdStack.length)? '' : cmdStack[cmdStackIdx]; setTimeout(()=>cmdInput.setSelectionRange(cmdInput.value.length, cmdInput.value.length),0); e.preventDefault(); }
+      } else if(e.key==='Escape'){ cancelAction(); }
       if(e.key===' ' && !cmdInput.value){ if(state.lastCmd) startCmd(state.lastCmd); e.preventDefault(); }
     });
+
     document.getElementById('searchAll').addEventListener('keydown', e=>{
       if(e.key==='Enter'){ const v=e.currentTarget.value.trim(); if(v){ handleCmdEnter(v); e.currentTarget.value=''; } else { cmdInput.focus(); } }
     });
@@ -1405,12 +1730,16 @@
       if(e.type==='poly'){ for(let k=0;k<e.pts.length;k++){ e.pts[k].x+=dx; e.pts[k].y+=dy; } }
       if(e.type==='blockref'){ e.pos.x+=dx; e.pos.y+=dy; }
       if(e.type==='text'||e.type==='point'){ e.pos.x+=dx; e.pos.y+=dy; }
+      if(e.type==='dim'){ e.a.x+=dx; e.a.y+=dy; e.b.x+=dx; e.b.y+=dy; }
+      if(e.type==='adim'){ e.a.x+=dx; e.a.y+=dy; e.b.x+=dx; e.b.y+=dy; e.c.x+=dx; e.c.y+=dy; }
     }
     function cloneEntity(e){
       if(e.type==='poly'){ const pts=[]; for(let j=0;j<e.pts.length;j++){ pts.push({x:e.pts[j].x,y:e.pts[j].y}); } return {type:'poly', pts:pts, closed:e.closed, layer:e.layer, color:e.color, ltype:e.ltype}; }
       if(e.type==='blockref'){ return {type:'blockref', ref:e.ref, pos:{x:e.pos.x,y:e.pos.y}, rot:(e.rot||0), scale:(e.scale||1), layer:e.layer, color:e.color}; }
       if(e.type==='text'){ return {type:'text', text:e.text, size:e.size, pos:{x:e.pos.x,y:e.pos.y}, layer:e.layer, color:e.color}; }
       if(e.type==='point'){ return {type:'point', pos:{x:e.pos.x,y:e.pos.y}, layer:e.layer, color:e.color}; }
+      if(e.type==='dim'){ return {type:'dim', a:{x:e.a.x,y:e.a.y}, b:{x:e.b.x,y:e.b.y}, offset:e.offset, layer:e.layer, color:e.color}; }
+      if(e.type==='adim'){ return {type:'adim', c:{x:e.c.x,y:e.c.y}, a:{x:e.a.x,y:e.a.y}, b:{x:e.b.x,y:e.b.y}, r:e.r, layer:e.layer, color:e.color}; }
       return null;
     }
     function applyRotate(angleDeg, base, asCopy){
@@ -1428,375 +1757,524 @@
       function R(pt){ const qx=pt.x-base.x, qy=pt.y-base.y; return {x: base.x + qx*cos - qy*sin, y: base.y + qx*sin + qy*cos}; }
       if(e.type==='poly'){ for(let j=0;j<e.pts.length;j++){ const p=R(e.pts[j]); e.pts[j].x=p.x; e.pts[j].y=p.y; } }
       else if(e.type==='blockref'){ const qx2=e.pos.x-base.x, qy2=e.pos.y-base.y; e.pos.x = base.x + qx2*cos - qy2*sin; e.pos.y = base.y + qx2*sin + qy2*cos; e.rot = (e.rot||0)+angDeg; }
-      else if(e.type==='text' || e.type==='point'){ const p2=R(e.pos); e.pos.x=p2.x; e.pos.y=p2.y; }
+      else if(e.type==='text' || e.type==='point'){ const p2=R(e.pos); e.pos.x=p2.x; e.pos.y=p2.y;
+      } else if(e.type==='dim'){
+        e.a = R(e.a); e.b = R(e.b);
+      } else if(e.type==='adim'){
+        e.a = R(e.a); e.b = R(e.b); e.c = R(e.c);
+      }
     }
-    function applyScale(fac, base, asCopy){
+
+    function applyScale(factor, base, asCopy){
       snapshot();
       const idxs=selectionIndices();
       if(asCopy){
         const newIdx=[];
-        for(let i=0;i<idxs.length;i++){ const c=cloneEntity(state.drawing.entities[idxs[i]]); scaleEntity(c,fac,base); state.drawing.entities.push(c); newIdx.push(state.drawing.entities.length-1); }
-        state.drawing.selection={}; for(let i=0;i<newIdx.length;i++){ state.drawing.selection[newIdx[i]]=true; }
-      } else { for(let i=0;i<idxs.length;i++){ scaleEntity(state.drawing.entities[idxs[i]], fac, base); } }
+        for(let i=0;i<idxs.length;i++){
+          const c=cloneEntity(state.drawing.entities[idxs[i]]);
+          scaleEntity(c,factor,base);
+          state.drawing.entities.push(c);
+          newIdx.push(state.drawing.entities.length-1);
+        }
+        state.drawing.selection={}; newIdx.forEach(i=>state.drawing.selection[i]=true);
+      } else {
+        idxs.forEach(i=>scaleEntity(state.drawing.entities[i],factor,base));
+      }
       draw();
     }
     function scaleEntity(e,fac,base){
-      if(e.type==='poly'){ for(let j=0;j<e.pts.length;j++){ const qx=e.pts[j].x-base.x, qy=e.pts[j].y-base.y; e.pts[j].x = base.x + qx*fac; e.pts[j].y = base.y + qy*fac; } }
-      else if(e.type==='blockref'){ const qx2=e.pos.x-base.x, qy2=e.pos.y-base.y; e.pos.x = base.x + qx2*fac; e.pos.y = base.y + qy2*fac; e.scale = (e.scale||1)*fac; }
-      else if(e.type==='text' || e.type==='point'){ const qx3=e.pos.x-base.x, qy3=e.pos.y-base.y; e.pos.x = base.x + qx3*fac; e.pos.y = base.y + qy3*fac; if(e.type==='text') e.size*=fac; }
+      function S(pt){ return { x: base.x + (pt.x-base.x)*fac, y: base.y + (pt.y-base.y)*fac }; }
+      if(e.type==='poly'){ e.pts=e.pts.map(p=>S(p)); }
+      else if(e.type==='blockref'){ e.pos=S(e.pos); e.scale=(e.scale||1)*fac; }
+      else if(e.type==='text'||e.type==='point'){ e.pos=S(e.pos); if(e.type==='text') e.size=(e.size||20)*fac; }
+      else if(e.type==='dim'){ e.a=S(e.a); e.b=S(e.b); e.offset=(e.offset||30)*fac; }
+      else if(e.type==='adim'){ e.a=S(e.a); e.b=S(e.b); e.c=S(e.c); e.r=(e.r||40)*fac; }
     }
-    function firstSelectedPoint(){
-      const idxs=selectionIndices(); if(!idxs.length) return null;
-      const e=state.drawing.entities[idxs[0]];
-      if(e.type==='poly'){ return e && e.pts && e.pts[0] ? {x:e.pts[0].x, y:e.pts[0].y} : null; }
-      if(e.type==='blockref'||e.type==='text'||e.type==='point'){ return {x:e.pos.x,y:e.pos.y}; }
-      return null;
+
+    /* ---------- Modify interaction ---------- */
+    function previewModifyPoint(){
+      if(!state.action || state.action.type!=='modify' || state.action.stage!==1) return null;
+      return state.action.preview || null;
     }
+    function handleModifyPick(w){
+      const s=getSnap(w.x,w.y,state.mouse.x,state.mouse.y,state.pickOverride);
+      const raw = s? {x:s.x,y:s.y}:{x:w.x,y:w.y};
+      if(state.action.stage===0){
+        state.action.base = raw;
+        state.action.stage=1;
+        enableDyn(raw);
+        pushHistory(state.action.kind.toUpperCase()+': pick target');
+        return;
+      }
+      // stage 1 -> apply
+      let pt = (state.dyn.active && state.dyn.lastBase)? applyDynFrom(state.dyn.lastBase, raw) : raw;
+      if(state.ortho && state.action.kind==='move'){ pt=applyOrtho(state.action.base, pt); }
+      const base = state.action.base;
+      if(state.action.kind==='move'){ applyTranslate(pt.x-base.x, pt.y-base.y, false); }
+      if(state.action.kind==='copy'){ applyTranslate(pt.x-base.x, pt.y-base.y, true); }
+      if(state.action.kind==='rotate'){
+        const ang = Math.atan2(pt.y-base.y, pt.x-base.x)*180/Math.PI;
+        applyRotate(ang, base, false);
+      }
+      if(state.action.kind==='scale'){
+        const d0 = Math.hypot(1,0); // ref
+        const s0 = Math.hypot(state.mouse.wx-base.x, state.mouse.wy-base.y) || 1;
+        const s1 = Math.hypot(pt.x-base.x, pt.y-base.y) || s0;
+        const fac = s1/s0;
+        applyScale(fac, base, false);
+      }
+      state.action=null; disableDyn(); draw();
+    }
+
+    /* ---------- Geometry helpers ---------- */
+    function addCircleAsPoly(cen, rad, layer, color){
+      const N=64; const pts=[];
+      for(let k=0;k<N;k++){
+        const t=k/N*TAU; pts.push({x:cen.x + rad*Math.cos(t), y:cen.y + rad*Math.sin(t)});
+      }
+      pts.push(pts[0]);
+      state.drawing.entities.push({type:'poly', pts, closed:true, layer:layer||state.currentLayer, color});
+    }
+    // Quadratic through 3 points (t in [0,1]), control chosen so curve passes mid at t=0.5
+    function quadThrough3(S,M,E,t){
+      // B = 2M - 0.5(S+E)
+      const Bx = 2*M.x - 0.5*(S.x+E.x);
+      const By = 2*M.y - 0.5*(S.y+E.y);
+      const u=1-t;
+      return {
+        x: u*u*S.x + 2*u*t*Bx + t*t*E.x,
+        y: u*u*S.y + 2*u*t*By + t*t*E.y
+      };
+    }
+
+    /* ---------- Zoom ---------- */
+    function savePrevView(){
+      state.viewPrev = {scale:state.scale, ox:state.ox, oy:state.oy};
+    }
+    function zoomPrevious(){
+      if(!state.viewPrev) return;
+      const cur={scale:state.scale, ox:state.ox, oy:state.oy};
+      state.scale=state.viewPrev.scale; state.ox=state.viewPrev.ox; state.oy=state.viewPrev.oy;
+      state.viewPrev=cur;
+      draw();
+    }
+    function doZoomWindowPx(p0,p1){
+      savePrevView();
+      const rect=canvas.getBoundingClientRect();
+      const x0=Math.min(p0.x,p1.x), y0=Math.min(p0.y,p1.y);
+      const x1=Math.max(p0.x,p1.x), y1=Math.max(p0.y,p1.y);
+      const w=Math.max(10, x1-x0), h=Math.max(10,y1-y0);
+      // Fit that screen-rect to entire canvas
+      const sx = (rect.width )/w;
+      const sy = (rect.height)/h;
+      state.scale = clamp(state.scale * Math.min(sx,sy), 0.1, 20);
+      // Center to window center
+      const midSx = (x0+x1)/2, midSy=(y0+y1)/2;
+      const midW  = s2w(midSx,midSy);
+      const canvasMid = {x:rect.width/2,y:rect.height/2};
+      const midWtoS = w2s(midW.x, midW.y);
+      state.ox += (canvasMid.x - midWtoS.x);
+      state.oy += (canvasMid.y - midWtoS.y);
+      draw();
+    }
+    function zoomExtents(){
+      if(!state.drawing.entities.length){ resetView(); return; }
+      const pts=[];
+      state.drawing.entities.forEach(e=>{
+        if(!entVisible(e)) return;
+        if(e.type==='poly'){ e.pts.forEach(p=>pts.push(p)); }
+        else if(e.type==='blockref'){ pts.push(e.pos); }
+        else if(e.type==='text'||e.type==='point'){ pts.push(e.pos); }
+        else if(e.type==='dim'){ pts.push(e.a,e.b); }
+        else if(e.type==='adim'){ pts.push(e.a,e.b,e.c); }
+      });
+      if(!pts.length){ resetView(); return; }
+      let minx=Infinity,miny=Infinity,maxx=-Infinity,maxy=-Infinity;
+      pts.forEach(p=>{ minx=Math.min(minx,p.x); miny=Math.min(miny,p.y); maxx=Math.max(maxx,p.x); maxy=Math.max(maxy,p.y); });
+      const rect=canvas.getBoundingClientRect();
+      const pad=0.08; // 8% padding
+      const bw=maxx-minx || 1, bh=maxy-miny || 1;
+      savePrevView();
+      const sx = rect.width /(bw*(1+pad*2));
+      const sy = rect.height/(bh*(1+pad*2));
+      state.scale = clamp(Math.min(sx,sy), 0.1, 20);
+      const cx=(minx+maxx)/2, cy=(miny+maxy)/2;
+      const cs=w2s(cx,cy);
+      state.ox += rect.width/2 - cs.x;
+      state.oy += rect.height/2 - cs.y;
+      draw();
+    }
+    function resetView(){
+      const rect=canvas.getBoundingClientRect();
+      savePrevView();
+      state.scale=1; state.ox=rect.width/2; state.oy=rect.height/2;
+      draw();
+    }
+
+    /* ---------- Selection ops ---------- */
     function eraseSelection(){
       const idxs=selectionIndices(); if(!idxs.length) return;
       snapshot();
-      const keep=[];
-      for(let i=0;i<state.drawing.entities.length;i++){ if(state.drawing.selection[i]) continue; keep.push(state.drawing.entities[i]); }
-      state.drawing.entities=keep; clearSelection(); draw();
+      for(let k=idxs.length-1;k>=0;k--){ state.drawing.entities.splice(idxs[k],1); }
+      clearSelection(); draw();
     }
 
-    /* ---------- Toolbar wiring (Home) ---------- */
+    /* ---------- Blocks ---------- */
+    function doMakeBlock(){
+      const name=(document.getElementById('blockName').value||'').trim();
+      if(!name){ alert('Enter a block name in the right panel first.'); return; }
+      const idxs=selectionIndices(); if(!idxs.length){ alert('Select entities to make a block.'); return; }
+      // base point: use last dynamic base if available, else first point of first entity, else (0,0)
+      let base = state.dyn.lastBase;
+      if(!base){
+        const e=state.drawing.entities[idxs[0]];
+        base = e.type==='poly' ? e.pts[0] : (e.pos || e.a || {x:0,y:0});
+      }
+      // Build definition
+      const def={ base:{x:base.x,y:base.y}, entities:[] };
+      idxs.forEach(i=>{
+        const e=state.drawing.entities[i];
+        if(e.type==='poly'){ def.entities.push({type:'poly', closed:e.closed, pts:e.pts.map(p=>({x:p.x,y:p.y}))}); }
+        else if(e.type==='point'){ def.entities.push({type:'point', pos:{x:e.pos.x,y:e.pos.y}}); }
+        else if(e.type==='text'){ def.entities.push({type:'text', text:e.text, size:e.size, pos:{x:e.pos.x,y:e.pos.y}}); }
+      });
+      state.blocks[name]=def;
+      rebuildBlockUI();
+      // Replace selection with single blockref at base
+      snapshot();
+      const layer=state.currentLayer;
+      // remove highest to lowest
+      const toRemove=[...idxs].sort((a,b)=>b-a);
+      toRemove.forEach(i=>state.drawing.entities.splice(i,1));
+      state.drawing.entities.push({type:'blockref', ref:name, pos:{x:base.x,y:base.y}, rot:0, scale:1, layer});
+      clearSelection(); draw();
+      pushHistory('Block "'+name+'" created');
+    }
+    function doInsertBlock(){
+      const sel=document.getElementById('blockList').value;
+      if(!sel){ alert('No block in library. Create with BMAKE first.'); return; }
+      state.action={type:'insertBlock', name:sel, stage:0};
+      pushHistory('BINS: pick insertion point');
+    }
+    function explodeSelected(){
+      const idxs=selectionIndices().filter(i=>state.drawing.entities[i].type==='blockref');
+      if(!idxs.length){ alert('Select a block reference.'); return; }
+      snapshot();
+      idxs.sort((a,b)=>a-b);
+      let add=[];
+      idxs.forEach(i=>{
+        const br=state.drawing.entities[i], def=state.blocks[br.ref]; if(!def) return;
+        const ang=(br.rot||0)*Math.PI/180, sc=br.scale||1, cos=Math.cos(ang), sin=Math.sin(ang);
+        function T(pt){ const x=(pt.x - def.base.x)*sc, y=(pt.y - def.base.y)*sc; return {x: br.pos.x + x*cos - y*sin, y: br.pos.y + x*sin + y*cos}; }
+        def.entities.forEach(e=>{
+          if(e.type==='poly'){
+            add.push({type:'poly', pts:e.pts.map(p=>T(p)), closed:e.closed, layer:br.layer, color:br.color});
+          } else if(e.type==='point'){
+            add.push({type:'point', pos:T(e.pos), layer:br.layer, color:br.color});
+          } else if(e.type==='text'){
+            const pp=T(e.pos); add.push({type:'text', text:e.text, size:e.size*(sc||1), pos:pp, layer:br.layer, color:br.color});
+          }
+        });
+      });
+      // remove in reverse
+      for(let k=idxs.length-1;k>=0;k--){ state.drawing.entities.splice(idxs[k],1); }
+      add.forEach(e=>state.drawing.entities.push(e));
+      clearSelection(); draw();
+      pushHistory('Exploded '+idxs.length+' block(s)');
+    }
+
+    /* ---------- M2P (midpoint between 2 picks) ---------- */
+    function startM2P(){
+      state.action={type:'m2p', stage:0};
+      pushHistory('M2P: pick first point');
+    }
+
+    /* ---------- Drawer / UI ---------- */
+    function toggleDrawer(force){
+      const el=document.getElementById('sideDrawer');
+      const show = (typeof force==='boolean')? force : (el.style.display==='none'||!el.style.display);
+      el.style.display = show ? 'block' : 'none';
+    }
+    function rebuildLayerUI(){
+      const cur = state.currentLayer;
+      const sel = document.getElementById('layerSelect');
+      const propSel = document.getElementById('propLayer');
+      [sel,propSel].forEach(s=>{
+        s.innerHTML='';
+        state.layers.forEach(L=>{
+          const o=document.createElement('option'); o.value=L.name; o.textContent=L.name+(L.visible===false?' (hidden)':'');
+          s.appendChild(o);
+        });
+      });
+      sel.value=cur; propSel.value=cur;
+    }
+    function rebuildBlockUI(){
+      const list=document.getElementById('blockList');
+      list.innerHTML='';
+      const names=Object.keys(state.blocks);
+      names.forEach(n=>{ const o=document.createElement('option'); o.value=n; o.textContent=n; list.appendChild(o); });
+    }
+
+    document.getElementById('toggleDrawer').addEventListener('click', ()=>toggleDrawer());
+    document.getElementById('applyProps').addEventListener('click', ()=>{
+      const color=document.getElementById('propColor').value;
+      const lay=document.getElementById('propLayer').value;
+      const ltype=document.getElementById('propLtype').value;
+      const idxs=selectionIndices(); if(!idxs.length){ alert('Select something first.'); return; }
+      snapshot();
+      idxs.forEach(i=>{
+        const e=state.drawing.entities[i];
+        if(lay) e.layer=lay;
+        if(color) e.color=color;
+        if(ltype) e.ltype=ltype;
+      });
+      draw();
+    });
+    document.getElementById('layerSelect').addEventListener('change', e=>{
+      state.currentLayer=e.target.value; draw();
+    });
+    document.getElementById('addLayerBtn').addEventListener('click', ()=>{
+      const name=(document.getElementById('newLayerName').value||'').trim();
+      const color=document.getElementById('newLayerColor').value;
+      if(!name){ alert('Layer name required.'); return; }
+      if(state.layers.find(L=>L.name===name)){ alert('Layer exists.'); return; }
+      state.layers.push({name, color, visible:true}); state.currentLayer=name; rebuildLayerUI(); draw();
+    });
+    document.getElementById('toggleLayerBtn').addEventListener('click', ()=>{
+      const n=state.currentLayer;
+      const L=state.layers.find(L=>L.name===n); if(!L){return;}
+      L.visible = !L.visible; rebuildLayerUI(); draw();
+    });
+    document.getElementById('delLayerBtn').addEventListener('click', ()=>{
+      const n=state.currentLayer;
+      if(n==='0'){ alert('Cannot delete layer 0.'); return; }
+      if(!confirm('Delete layer "'+n+'"? Entities on it will move to 0.')) return;
+      const idx = state.layers.findIndex(L=>L.name===n);
+      if(idx===-1) return;
+      snapshot();
+      state.drawing.entities.forEach(e=>{ if(e.layer===n) e.layer='0'; });
+      state.layers.splice(idx,1); state.currentLayer='0';
+      rebuildLayerUI(); draw();
+    });
+
+    document.getElementById('units').addEventListener('change', e=>{ state.units=e.target.value; draw(); });
+
+    /* ---------- Toolbar wiring ---------- */
     function wireToolbarButtons(){
-      const q = sel=>document.querySelector(sel);
-      if(!q('#tb-select')) return;
-
-      q('#tb-select').onclick =()=>{ setMode('select'); activateBtn('tb-select'); state.action=null; disableDyn(); };
-      q('#tb-point').onclick  =()=> startCmd('point');
-      q('#tb-text').onclick   =()=> startCmd('text');
-      q('#tb-arc').onclick    =()=> startCmd('arc3p');
-      q('#tb-line').onclick   =()=> startCmd('line');
-      q('#tb-poly').onclick   =()=> startCmd('pline');
-      q('#tb-trace').onclick  =()=> startCmd('trace');
-      q('#tb-rect').onclick   =()=> startCmd('rect');
-      q('#tb-circle').onclick =()=> startCmd('circle');
-
-      q('#tb-move').onclick   =()=> startCmd('move');
-      q('#tb-copy').onclick   =()=> startCmd('copy');
-      q('#tb-rotate').onclick =()=> startCmd('rotate');
-      q('#tb-scale').onclick  =()=> startCmd('scale');
-      q('#tb-erase').onclick  =()=> startCmd('erase');
-      q('#tb-mirror').onclick =()=> startCmd('mirror');
-      q('#tb-offset').onclick =()=> startCmd('offset');
-      q('#tb-stretch').onclick=()=> startCmd('stretch');
-      q('#tb-chamfer').onclick=()=> startCmd('chamfer');
-
-      q('#tb-pan').onclick      =()=> { setMode('pan'); activateBtn('tb-pan'); };
-      q('#tb-zoom-win').onclick =()=> { state.action={type:'zoomwin',stage:0}; activateBtn('tb-zoom-win'); };
-      q('#tb-zoom-prev').onclick=()=>  zoomPrevious();
-      q('#tb-zoom-ext').onclick =()=>  zoomExtents();
-
-      q('#tb-make-block').onclick =()=> startCmd('bmake');
-      q('#tb-insert-block').onclick=()=> startCmd('bins');
-      q('#tb-explode').onclick     =()=> startCmd('explode');
-      const m2p = document.getElementById('m2pBtn'); if(m2p) m2p.onclick=()=> startCmd('m2p');
+      const map = [
+        ['tb-select',   ()=>{ setMode('select'); activateBtn('tb-select'); }],
+        ['tb-point',    ()=>startCmd('point')],
+        ['tb-line',     ()=>startCmd('line')],
+        ['tb-arc',      ()=>startCmd('arc3p')],
+        ['tb-poly',     ()=>startCmd('pline')],
+        ['tb-rect',     ()=>startCmd('rect')],
+        ['tb-circle',   ()=>startCmd('circle')],
+        ['tb-trace',    ()=>startCmd('trace')],
+        ['tb-text',     ()=>startCmd('text')],
+        ['tb-erase',    ()=>startCmd('erase')],
+        ['tb-mirror',   ()=>startCmd('mirror')],
+        ['tb-offset',   ()=>startCmd('offset')],
+        ['tb-stretch',  ()=>startCmd('stretch')],
+        ['tb-move',     ()=>startCmd('move')],
+        ['tb-copy',     ()=>startCmd('copy')],
+        ['tb-rotate',   ()=>startCmd('rotate')],
+        ['tb-scale',    ()=>startCmd('scale')],
+        ['tb-make-block', ()=>startCmd('bmake')],
+        ['tb-insert-block', ()=>startCmd('bins')],
+        ['tb-explode',  ()=>startCmd('explode')],
+        ['tb-pan',      ()=>{ setMode('pan'); activateBtn('tb-pan'); }],
+        ['tb-zoom-win', ()=>{ state.action={type:'zoomwin',stage:0}; activateBtn('tb-zoom-win'); }],
+        ['tb-zoom-prev',()=>zoomPrevious()],
+        ['tb-zoom-ext', ()=>zoomExtents()],
+        ['m2pBtn',      ()=>startCmd('m2p')],
+        ['forceRedraw', ()=>draw()],
+        ['resetView',   ()=>resetView()],
+        ['toggleDrawer',()=>toggleDrawer()]
+      ];
+      map.forEach(([id,fn])=>{ const el=document.getElementById(id); if(el){ el.onclick=fn; }});
     }
     wireToolbarButtons();
 
-    /* ---------- Side drawer toggle ---------- */
-    const sideDrawer = document.getElementById('sideDrawer');
-    function toggleDrawer(forceOpen){
-      if(forceOpen===true){ sideDrawer.style.display='block'; return; }
-      sideDrawer.style.display = (sideDrawer.style.display==='block' ? 'none':'block');
-    }
-    document.getElementById('toggleDrawer').onclick=()=>toggleDrawer();
-
-    /* ---------- App bar & status bar controls ---------- */
-    document.getElementById('openBtn').onclick =()=> document.getElementById('fileInput').click();
-    document.getElementById('saveBtn').onclick =()=> saveJSON();
-    document.getElementById('saveDxfBtn').onclick=()=> saveDXF();
-    document.getElementById('undoBtn').onclick=()=>undo();
-    document.getElementById('redoBtn').onclick=()=>redo();
-    document.getElementById('fileInput').addEventListener('change', onOpenFile);
-
+    /* ---------- Status toggles ---------- */
     document.getElementById('showGrid').addEventListener('change', e=>{ state.showGrid=e.target.checked; draw(); });
     document.getElementById('snapGrid').addEventListener('change', e=>{ state.snaps.grid=e.target.checked; draw(); });
     document.getElementById('snapEnds').addEventListener('change', e=>{ state.snaps.ends=e.target.checked; draw(); });
     document.getElementById('snapMids').addEventListener('change', e=>{ state.snaps.mids=e.target.checked; draw(); });
     document.getElementById('snapInters').addEventListener('change', e=>{ state.snaps.inters=e.target.checked; draw(); });
     document.getElementById('orthoLock').addEventListener('change', e=>{ state.ortho=e.target.checked; });
-    document.getElementById('gridStep').addEventListener('change', e=>{ const v=parseFloat(e.target.value); if(isFinite(v)&&v>0) state.grid.step=v; draw(); });
+    document.getElementById('gridStep').addEventListener('change', e=>{ const v=parseFloat(e.target.value)||50; state.grid.step=Math.max(1,v); draw(); });
     document.getElementById('bigCross').addEventListener('change', e=>{ state.cursor.big=e.target.checked; draw(); });
-    document.getElementById('pickSize').addEventListener('change', e=>{ const v=parseFloat(e.target.value); if(isFinite(v)&&v>0) state.cursor.pick=v; draw(); });
-    document.getElementById('units').addEventListener('change', e=>{ state.units=e.target.value; draw(); });
+    document.getElementById('pickSize').addEventListener('change', e=>{ state.cursor.pick = clamp(parseInt(e.target.value,10)||12,4,40); draw(); });
 
-    document.getElementById('navZoomIn').onclick = ()=>{ state.scale=clamp(state.scale*1.2,0.1,20); draw(); };
-    document.getElementById('navZoomOut').onclick= ()=>{ state.scale=clamp(state.scale/1.2,0.1,20); draw(); };
-    document.getElementById('navFit').onclick    = ()=> zoomExtents();
-    document.getElementById('navPan').onclick    = ()=> { setMode('pan'); activateBtn('tb-pan'); };
+    /* ---------- Nav buttons ---------- */
+    document.getElementById('navZoomIn').addEventListener('click', ()=>{
+      const rect=canvas.getBoundingClientRect(); const x=rect.width/2, y=rect.height/2;
+      const before=s2w(x,y); savePrevView();
+      state.scale=clamp(state.scale*1.2,0.1,20);
+      const after=w2s(before.x,before.y); state.ox+=(x-after.x); state.oy+=(y-after.y); draw();
+    });
+    document.getElementById('navZoomOut').addEventListener('click', ()=>{
+      const rect=canvas.getBoundingClientRect(); const x=rect.width/2, y=rect.height/2;
+      const before=s2w(x,y); savePrevView();
+      state.scale=clamp(state.scale/1.2,0.1,20);
+      const after=w2s(before.x,before.y); state.ox+=(x-after.x); state.oy+=(y-after.y); draw();
+    });
+    document.getElementById('navFit').addEventListener('click', zoomExtents);
+    document.getElementById('navPan').addEventListener('click', ()=>{ setMode('pan'); });
 
-    /* ===== Layers UI ===== */
-    function rebuildLayerUI(){
-      const sel = document.getElementById('layerSelect');
-      const propSel=document.getElementById('propLayer');
-      sel.innerHTML=''; propSel.innerHTML='';
-      for(let i=0;i<state.layers.length;i++){
-        const L = state.layers[i];
-        const opt=document.createElement('option'); opt.value=L.name; opt.textContent=L.name + (L.visible===false?' (hidden)':''); sel.appendChild(opt);
-        const opt2=document.createElement('option'); opt2.value=L.name; opt2.textContent=L.name; propSel.appendChild(opt2);
-      }
-      sel.value=state.currentLayer; propSel.value=state.currentLayer;
-    }
-    function ensureLayer(name, color){
-      let L = state.layers.find(x=>x.name===name);
-      if(!L){ L = {name:name||'0', color:color||'#e0e6ff', visible:true}; state.layers.push(L); rebuildLayerUI(); }
-      return L;
-    }
-    function ensureLayersFromEntities(){
-      const seen={};
-      state.drawing.entities.forEach(e=>{ seen[e.layer||'0']=true; });
-      Object.keys(seen).forEach(k=>ensureLayer(k));
-    }
-    document.getElementById('layerSelect').addEventListener('change', e=>{ state.currentLayer=e.target.value; });
-    document.getElementById('addLayerBtn').onclick=function(){
-      const name=document.getElementById('newLayerName').value || ('Layer'+(state.layers.length));
-      const color=document.getElementById('newLayerColor').value || '#e0e6ff';
-      ensureLayer(name, color); state.currentLayer=name; rebuildLayerUI();
-    };
-    document.getElementById('toggleLayerBtn').onclick=function(){
-      const cur=currentLayerObj(); if(!cur) return; cur.visible = !cur.visible; rebuildLayerUI(); draw();
-    };
-    document.getElementById('delLayerBtn').onclick=function(){
-      if(state.currentLayer==='0') return;
-      snapshot();
-      state.drawing.entities.forEach(e=>{ if(e.layer===state.currentLayer) e.layer='0'; });
-      state.layers = state.layers.filter(L=>L.name!==state.currentLayer);
-      state.currentLayer='0'; rebuildLayerUI(); draw();
-    };
-    document.getElementById('applyProps').onclick=function(){
-      const newLayer=document.getElementById('propLayer').value;
-      const newColor=document.getElementById('propColor').value;
-      const newLtype=document.getElementById('propLtype').value;
-      ensureLayer(newLayer);
-      const idxs=selectionIndices(); if(!idxs.length) return;
-      snapshot();
-      idxs.forEach(i=>{
-        const e=state.drawing.entities[i];
-        e.layer=newLayer; e.color=newColor; e.ltype=newLtype;
-      });
-      draw();
-    };
-
-    /* ===== View helpers ===== */
-    function zoomPrevious(){
-      if(!state.viewPrev) return;
-      const cur={ox:state.ox, oy:state.oy, scale:state.scale};
-      state.ox=state.viewPrev.ox; state.oy=state.viewPrev.oy; state.scale=state.viewPrev.scale;
-      state.viewPrev=cur; draw();
-    }
-    function rememberView(){ state.viewPrev={ox:state.ox, oy:state.oy, scale:state.scale}; }
-    function zoomExtents(){
-      const pad=40;
-      const rect=canvas.getBoundingClientRect();
-      if(state.drawing.entities.length===0){ state.scale=1; state.ox=rect.width/2; state.oy=rect.height/2; draw(); return; }
-      let minX=+1e9,minY=+1e9,maxX=-1e9,maxY=-1e9;
-      function grow(x,y){ if(x<minX)minX=x; if(y<minY)minY=y; if(x>maxX)maxX=x; if(y>maxY)maxY=y; }
-      state.drawing.entities.forEach(e=>{
-        if(e.type==='poly'){ e.pts.forEach(p=>grow(p.x,p.y)); }
-        else if(e.type==='text' || e.type==='point'){ grow(e.pos.x,e.pos.y); }
-        else if(e.type==='blockref'){ grow(e.pos.x,e.pos.y); }
-      });
-      const w=maxX-minX||1, h=maxY-minY||1;
-      const sx=(rect.width-2*pad)/w, sy=(rect.height-2*pad)/h;
-      rememberView();
-      state.scale=Math.max(0.1, Math.min(20, Math.min(sx,sy)));
-      const cX=(minX+maxX)/2, cY=(minY+maxY)/2;
-      const s=w2s(cX,cY);
-      state.ox += (rect.width/2 - s.x);
-      state.oy += (rect.height/2 - s.y);
-      draw();
-    }
-    function doZoomWindowPx(a,b){
-      const rect=canvas.getBoundingClientRect();
-      const x0=Math.min(a.x,b.x), x1=Math.max(a.x,b.x);
-      const y0=Math.min(a.y,b.y), y1=Math.max(a.y,b.y);
-      const w=Math.max(10, x1-x0), h=Math.max(10, y1-y0);
-      const A=s2w(x0,y1), B=s2w(x1,y0);
-      const worldW=B.x-A.x, worldH=B.y-A.y;
-      const pad=20;
-      rememberView();
-      const sx=(rect.width-2*pad)/worldW, sy=(rect.height-2*pad)/worldH;
-      state.scale=Math.max(0.1, Math.min(20, Math.min(sx,sy)));
-      const cX=(A.x+B.x)/2, cY=(A.y+B.y)/2;
-      const s=w2s(cX,cY);
-      state.ox += (rect.width/2 - s.x);
-      state.oy += (rect.height/2 - s.y);
-    }
-
-    /* ===== Geometry helpers ===== */
-    function addCircleAsPoly(cen, rad, layer){
-      const N=64; const pts=[];
-      for(let k=0;k<N;k++){
-        const a=k/N*2*Math.PI;
-        pts.push({x:cen.x+rad*Math.cos(a), y:cen.y+rad*Math.sin(a)});
-      }
-      state.drawing.entities.push({type:'poly', pts:pts, closed:true, layer:layer||state.currentLayer});
-    }
-    function quadThrough3(st,mid,en,u){
-      const t=u, one=1-t;
-      const Qx = 2*mid.x - 0.5*(st.x+en.x);
-      const Qy = 2*mid.y - 0.5*(st.y+en.y);
-      return { x: one*one*st.x + 2*one*t*Qx + t*t*en.x,
-               y: one*one*st.y + 2*one*t*Qy + t*t*en.y };
-    }
-
-    /* ===== Move/Copy/Rotate/Scale base-pick ===== */
-    canvas.addEventListener('mousedown', (e)=>{
-      if(state.action && state.action.type==='modify'){
-        const rect=canvas.getBoundingClientRect();
-        const x=e.clientX-rect.left, y=e.clientY-rect.top;
-        const base=s2w(x,y);
-        if(state.action.stage===0){
-          state.action.base=base; state.action.stage=1; pushHistory(state.action.kind.toUpperCase()+': base set');
-        } else if(state.action.stage===1){
-          if(state.action.kind==='move'){ const dx=base.x-state.action.base.x, dy=base.y-state.action.base.y; applyTranslate(dx,dy,false); state.action=null; draw(); }
-          if(state.action.kind==='copy'){ const dx=base.x-state.action.base.x, dy=base.y-state.action.base.y; applyTranslate(dx,dy,true);  state.action=null; draw(); }
-          if(state.action.kind==='rotate'){ pushHistory('Rotate: enter angle'); cmdInput.focus(); }
-          if(state.action.kind==='scale'){  pushHistory('Scale: enter factor'); cmdInput.focus(); }
-        }
-      }
-    }, {capture:true});
-
-    /* ===== M2P ===== */
-    function startM2P(){
-      pushHistory('M2P: pick first point');
-      let step=0, A=null;
-      function onClick(ev){
-        const r=canvas.getBoundingClientRect();
-        const p=s2w(ev.clientX-r.left, ev.clientY-r.top);
-        if(step===0){ A=p; step=1; pushHistory('M2P: pick second point'); }
-        else{
-          const M={x:(A.x+p.x)/2, y:(A.y+p.y)/2};
-          state.dyn.lastBase=M;
-          pushHistory('M2P: base set to '+fmt(M.x)+','+fmt(M.y));
-          canvas.removeEventListener('click', onClick, true);
-        }
-      }
-      canvas.addEventListener('click', onClick, true);
-    }
-
-    /* ===== Blocks ===== */
-    function rebuildBlockUI(){
-      const list=document.getElementById('blockList'); list.innerHTML='';
-      for(const k in state.blocks){ if(Object.prototype.hasOwnProperty.call(state.blocks,k)){ const o=document.createElement('option'); o.value=k; o.textContent=k; list.appendChild(o);} }
-    }
-    function doMakeBlock(){
-      const idxs=selectionIndices(); if(!idxs.length){ alert('Select entities first.'); return; }
-      const name=(document.getElementById('blockName').value||'Block') + '';
-      const base=state.dyn.lastBase || firstSelectedPoint() || {x:0,y:0};
-      const ents=[]; let i,j, e, pts;
-
-      for(i=0;i<idxs.length;i++){
-        e=state.drawing.entities[idxs[i]];
-        if(e.type==='poly'){
-          pts=[];
-          for(j=0;j<e.pts.length;j++){ pts.push({x:e.pts[j].x,y:e.pts[j].y}); }
-          ents.push({type:'poly', pts:pts, closed:e.closed, layer:e.layer, color:e.color});
-        }
-      }
-      if(!ents.length){ alert('Only polyline-like entities supported for blocks in this version.'); return; }
-      state.blocks[name]={name:name, base:{x:base.x,y:base.y}, entities:ents};
-      rebuildBlockUI();
-      alert('Block "'+name+'" created. Use Insert Block to place it.');
-    }
-    function doInsertBlock(){
-      const name=(document.getElementById('blockName').value || document.getElementById('blockList').value || '').trim();
-      if(!name || !state.blocks[name]){ alert('No such block "'+name+'".'); return; }
-      pushHistory('BINS: pick insertion point');
-      function onClick(ev){
-        const r=canvas.getBoundingClientRect(); const p=s2w(ev.clientX-r.left, ev.clientY-r.top);
-        snapshot();
-        state.drawing.entities.push({type:'blockref', ref:name, pos:{x:p.x,y:p.y}, rot:0, scale:1, layer:state.currentLayer});
-        canvas.removeEventListener('click', onClick, true);
-        draw();
-      }
-      canvas.addEventListener('click', onClick, true);
-    }
-    function explodeSelected(){
-      const idxs=selectionIndices().reverse(); if(!idxs.length){ alert('Select a block reference to explode.'); return; }
-      snapshot();
-      idxs.forEach(i=>{
-        const e=state.drawing.entities[i];
-        if(e.type!=='blockref') return;
-        const blk=state.blocks[e.ref]; if(!blk) return;
-        const ang=(e.rot||0)*Math.PI/180, sc=(e.scale||1), cos=Math.cos(ang), sin=Math.sin(ang);
-        function T(pt){ const x=(pt.x - blk.base.x)*sc, y=(pt.y - blk.base.y)*sc; return {x: e.pos.x + x*cos - y*sin, y: e.pos.y + x*sin + y*cos}; }
-        blk.entities.forEach(be=>{
-          if(be.type==='poly'){
-            const pts=be.pts.map(p=>T(p));
-            state.drawing.entities.push({type:'poly', pts:pts, closed:be.closed, layer:e.layer, color:e.color||be.color});
-          }
-        });
-      });
-      state.drawing.entities = state.drawing.entities.filter((_,i)=>!state.drawing.selection[i]);
-      clearSelection(); draw();
-    }
-
-    /* ===== File I/O ===== */
-    function saveJSON(){
-      const data = {
-        meta:{app:'mini-cad-2d', v:1},
-        view:{ox:state.ox, oy:state.oy, scale:state.scale},
-        layers:state.layers,
-        currentLayer:state.currentLayer,
-        blocks:state.blocks,
-        entities:state.drawing.entities
-      };
-      const blob = new Blob([JSON.stringify(data,null,2)], {type:'application/json'});
-      const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='drawing.json'; a.click();
+    /* ---------- File I/O ---------- */
+    function downloadFile(name, text){
+      const a=document.createElement('a');
+      a.href=URL.createObjectURL(new Blob([text], {type:'text/plain'}));
+      a.download=name; a.click();
       URL.revokeObjectURL(a.href);
     }
-    function onOpenFile(ev){
-      const f=ev.target.files && ev.target.files[0]; if(!f) return;
-      const reader=new FileReader();
-      reader.onload=function(){
-        try{
-          const txt=String(reader.result||'');
-          if(f.name.toLowerCase().endsWith('.json') || txt.trim().startsWith('{')){
-            const d=JSON.parse(txt);
-            state.layers=d.layers||[{name:'0',color:'#e0e6ff',visible:true}];
-            state.currentLayer=d.currentLayer||'0';
-            state.blocks=d.blocks||{};
-            state.drawing.entities=d.entities||[];
-            if(d.view){ state.ox=d.view.ox||state.ox; state.oy=d.view.oy||state.oy; state.scale=d.view.scale||state.scale; }
-            rebuildLayerUI(); rebuildBlockUI(); clearSelection(); draw();
-          } else {
-            alert('Only JSON is supported in this build.');
-          }
-        }catch(ex){ showErr(ex.message||ex); }
-      };
-      reader.readAsText(f);
-      ev.target.value='';
+    function saveJSON(){
+      const doc=captureFromState();
+      const name=(state.name || 'Drawing') + '.json';
+      downloadFile(name, JSON.stringify(doc, null, 2));
+      okPill.textContent='Saved ✓'; okPill.style.background=''; okPill2.textContent='Saved';
+      state.dirty=false; rebuildFileTabs(); updateTitle();
     }
-    function saveDXF(){
+    function exportDXF(){
+      const d = state.drawing.entities;
       const lines=[];
-      function push(k,v){ lines.push(String(k)); lines.push(String(v)); }
+      function push(g,v){ lines.push(String(g), String(v)); }
+      // Header
       push(0,'SECTION'); push(2,'ENTITIES');
-      state.drawing.entities.forEach(e=>{
+      d.forEach(e=>{
+        if(!entVisible(e)) return;
         if(e.type==='poly'){
-          push(0,'LWPOLYLINE');
-          push(90, e.pts.length + (e.closed?1:0));
-          e.pts.forEach(p=>{ push(10, p.x); push(20, p.y); });
-          if(e.closed && e.pts.length){ push(10, e.pts[0].x); push(20, e.pts[0].y); }
+          for(let i=0;i<e.pts.length-1;i++){
+            const a=e.pts[i], b=e.pts[i+1];
+            push(0,'LINE'); push(8,e.layer||'0');
+            push(10,a.x); push(20,a.y); push(30,0);
+            push(11,b.x); push(21,b.y); push(31,0);
+          }
+        } else if(e.type==='point'){
+          push(0,'POINT'); push(8,e.layer||'0');
+          push(10,e.pos.x); push(20,e.pos.y); push(30,0);
+        } else if(e.type==='text'){
+          push(0,'TEXT'); push(8,e.layer||'0');
+          push(10,e.pos.x); push(20,e.pos.y); push(30,0);
+          push(40, e.size||20); push(1, e.text||'TXT');
+        } else if(e.type==='blockref'){
+          // Drop as INSERT if simple
+          push(0,'INSERT'); push(8,e.layer||'0');
+          push(2, e.ref||'BLOCK'); push(10,e.pos.x); push(20,e.pos.y); push(30,0);
+          push(41, e.scale||1); push(50, e.rot||0);
         }
+        // dims/adim skipped in minimal export
       });
       push(0,'ENDSEC'); push(0,'EOF');
-      const blob=new Blob([lines.join('\n')], {type:'application/dxf'});
-      const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='drawing.dxf'; a.click();
-      URL.revokeObjectURL(a.href);
+      const name=(state.name||'Drawing')+'.dxf';
+      downloadFile(name, lines.join('\n'));
+      okPill.textContent='DXF saved ✓'; okPill2.textContent='DXF saved';
     }
 
-    /* ===== Boot ===== */
-    window.addEventListener('resize', setCanvasSize);
-    setCanvasSize();
-    ensureLayer('0','#e0e6ff'); rebuildLayerUI(); rebuildBlockUI();
-    okPill.textContent='OK ✓'; okPill2.textContent='Ready';
-   } catch(ex){
-    showErr(ex.message||ex);
+    document.getElementById('saveBtn').addEventListener('click', saveJSON);
+    document.getElementById('saveDxfBtn').addEventListener('click', exportDXF);
+    document.getElementById('undoBtn').addEventListener('click', undo);
+    document.getElementById('redoBtn').addEventListener('click', redo);
+
+    // Open
+    const fileInput=document.getElementById('fileInput');
+    document.getElementById('openBtn').addEventListener('click', ()=>fileInput.click());
+    fileInput.addEventListener('change', async (e)=>{
+      const f=e.target.files && e.target.files[0]; if(!f) return;
+      const txt = await f.text();
+      if(f.name.toLowerCase().endsWith('.json')){
+        try{
+          const doc=JSON.parse(txt);
+          // Push current to docs, then apply loaded
+          if(currentDocIndex>=0){ docs[currentDocIndex] = captureFromState(); }
+          docs.push(doc);
+          currentDocIndex=docs.length-1;
+          applyToState(doc);
+          rebuildFileTabs();
+          okPill.textContent='Loaded ✓'; okPill2.textContent='Loaded';
+        }catch(ex){ showErr('Invalid JSON.\n'+ex.message); }
+      } else if(f.name.toLowerCase().endsWith('.dxf') || f.name.toLowerCase().endsWith('.txt')){
+        alert('DXF import not implemented yet (export works).');
+      } else {
+        showErr('Unsupported file type.');
+      }
+      fileInput.value='';
+    });
+
+    /* ---------- Properties quick sync ---------- */
+    function updateTitle(){ document.getElementById('titleFile').textContent='Mini-CAD — '+(state.name||'Drawing1')+(state.dirty?'*':''); }
+    // Override existing markDirty to also update title (preserve reference)
+    const _markDirty = markDirty;
+    markDirty = function(){ _markDirty(); updateTitle(); };
+
+    /* ---------- Mouse additions (modify, insert, m2p) ---------- */
+    canvas.addEventListener('mousedown', function(e){
+      // (We’re appending extra handlers without interfering with earlier logic)
+      // This event already exists above; we only act on actions not handled earlier.
+      if(e.defaultPrevented) return;
+    }, true);
+
+    window.addEventListener('mousedown', function(e){
+      const rect=canvas.getBoundingClientRect();
+      if(e.target!==canvas) return;
+      const x=e.clientX-rect.left, y=e.clientY-rect.top;
+      const w=s2w(x,y);
+      // INSERT BLOCK
+      if(state.action && state.action.type==='insertBlock'){
+        const name=state.action.name;
+        if(!state.blocks[name]){ alert('Block not found.'); state.action=null; return; }
+        snapshot();
+        state.drawing.entities.push({type:'blockref', ref:name, pos:{x:w.x,y:w.y}, rot:0, scale:1, layer:state.currentLayer});
+        state.action=null; draw(); return;
+      }
+      // M2P
+      if(state.action && state.action.type==='m2p'){
+        if(state.action.stage===0){ state.action.p1={x:w.x,y:w.y}; state.action.stage=1; pushHistory('M2P: pick second point'); return; }
+        const p1=state.action.p1, p2={x:w.x,y:w.y};
+        const mid={x:(p1.x+p2.x)/2,y:(p1.y+p2.y)/2};
+        snapshot(); state.drawing.entities.push({type:'point', pos:mid, layer:state.currentLayer});
+        state.action=null; draw(); return;
+      }
+      // MODIFY
+      if(state.action && state.action.type==='modify'){
+        handleModifyPick(w);
+        return;
+      }
+    });
+
+    window.addEventListener('mousemove', function(e){
+      const rect=canvas.getBoundingClientRect();
+      if(e.target!==canvas) return;
+      const x=e.clientX-rect.left, y=e.clientY-rect.top;
+      const w=s2w(x,y);
+      if(state.action && state.action.type==='modify' && state.action.stage===1){
+        const s=getSnap(w.x,w.y,state.mouse.x,state.mouse.y,state.pickOverride);
+        const raw = s? {x:s.x,y:s.y}:{x:w.x,y:w.y};
+        let pt = (state.dyn.active && state.dyn.lastBase)? applyDynFrom(state.dyn.lastBase, raw) : raw;
+        if(state.ortho && state.action.kind==='move'){ pt=applyOrtho(state.action.base, pt); }
+        state.action.preview=pt;
+        draw();
+        // Simple ghost: draw a line from base to preview
+        const sa=w2s(state.action.base.x,state.action.base.y);
+        const sb=w2s(pt.x,pt.y);
+        ctx.save(); ctx.setLineDash([4,3]); ctx.strokeStyle=css('--accent2'); ctx.beginPath(); ctx.moveTo(sa.x,sa.y); ctx.lineTo(sb.x,sb.y); ctx.stroke(); ctx.restore();
+      }
+    }, true);
+
+    /* ---------- Status bar pills ---------- */
+    okPill2.textContent='Ready';
+    okPill.textContent='Ready ✓';
+
+    /* ---------- Start with an empty doc ---------- */
+    addDoc();
+    setMode('select');
+    activateBtn('tb-select');
+    rebuildLayerUI(); rebuildBlockUI(); updateTitle(); draw();
+
+  }catch(ex){
+    console.error(ex);
+    (window.showErr||function(msg){alert(msg);})(ex && ex.stack || ex);
   }
 })();
 </script>
