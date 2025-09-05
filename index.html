@@ -9,12 +9,16 @@
     --bg:#0b0e14; --panel:#121625; --ink:#e8ecf1; --muted:#9aa4b2; --accent:#4da3ff; --accent2:#47e5a1;
     --grid-minor:#2e344a; --grid-major:#4f5b88; --axis:#7aa2ff; --sel:#7aa2ff33; --hud:#0e1628cc; --hud-border:#2a3a70;
     --bar:#0f1426; --bar2:#0b1021; --stroke:#1e2335;
+    --status-h:38px;
+    --modeltabs-h:28px;
   }
   *{box-sizing:border-box}
   html,body{height:100%; margin:0; background:var(--bg); color:var(--ink); font-family:Arial,Helvetica,system-ui; overscroll-behavior:none}
+  body{overflow:hidden;}
+
   #app{
-    height:100vh; display:grid;
-    grid-template-rows: 36px 32px 40px 34px 1fr 28px 38px;
+    height:100dvh; min-height:100dvh; display:grid;
+    grid-template-rows: 36px 32px 40px 34px 1fr var(--modeltabs-h) var(--status-h);
     grid-template-columns: 1fr;
     grid-template-areas:
       "appbar"
@@ -24,8 +28,9 @@
       "drawing"
       "modellayout"
       "status";
-    min-height: 100vh;
+    padding-bottom: var(--status-h);
   }
+
   .bar{display:flex; align-items:center; gap:.4rem; padding:0 .5rem; border-bottom:1px solid var(--stroke)}
   #appbar{grid-area:appbar; background:var(--bar)}
   #titlebar{grid-area:titlebar; background:var(--bar2)}
@@ -40,8 +45,9 @@
   .title-right{display:flex; align-items:center; gap:.5rem}
   #searchAll{height:26px; background:#101425; color:#e6e6e6; border:1px solid #1e2436; border-radius:.35rem; padding:.25rem .45rem; min-width:240px}
   .info-icon{width:24px; height:24px; display:inline-grid; place-items:center; border:1px solid #243154; border-radius:.35rem; background:#151a31}
+
   .ribbon-tabs{display:flex; gap:.25rem; padding:.2rem .4rem; border-bottom:1px solid #202846}
-  .ribbon-tab{padding:.25rem .6rem; font-size:.92rem; border-radius:.35rem .35rem 0 0; cursor:pointer; color:#cbd5f1}
+  .ribbon-tab{padding:.25rem .6rem; font-size:.92rem; border-radius:.35rem .35rem 0 0; cursor:pointer; color:#cbd5f1; user-select:none}
   .ribbon-tab.active{background:#10162c; border:1px solid #243154; border-bottom:none}
   .ribbon-body{display:flex; gap:.75rem; padding:.5rem; overflow:auto}
   .group{background:#0f152c; border:1px solid #243154; border-radius:.5rem; padding:.45rem; min-width:180px}
@@ -49,23 +55,29 @@
   .grow{display:flex; flex-wrap:wrap; gap:.35rem}
   .tool-btn{min-width:44px; height:34px; background:#161c32; color:#dfe7ff; border:1px solid #2c3861; border-radius:.4rem; cursor:pointer; font-size:.8rem; padding:0 .5rem}
   .tool-btn.active{outline:2px solid var(--accent)}
+
   .file-tab{height:26px; display:flex; align-items:center; padding:0 .6rem; background:#151a31; color:#dce6ff; border:1px solid #273056; border-bottom:none; border-top-left-radius:.4rem; border-top-right-radius:.4rem}
   .file-tab.current{background:#10162c; font-weight:600}
   .file-tab .dirty{margin-left:.4rem; color:#f7c94b}
   .file-plus{margin-left:auto; height:24px; width:24px; display:grid; place-items:center; border:1px dashed #2a3358; border-radius:.35rem; cursor:pointer}
+
   #drawing{grid-area:drawing; position:relative; background:#0a0d16}
   canvas{display:block; width:100%; height:100%; background:transparent; touch-action:none; cursor:none}
-  #ucs{position:absolute; left:10px; bottom:56px; width:64px; height:64px; border:1px solid #203050; border-radius:.5rem; background:#0d1326aa; display:grid; place-items:center; font:11px/1 monospace; color:#9ab3ff}
+
+  #ucs{position:absolute; left:10px; bottom:calc(var(--modeltabs-h) + var(--status-h) + 10px); width:64px; height:64px; border:1px solid #203050; border-radius:.5rem; background:#0d1326aa; display:grid; place-items:center; font:11px/1 monospace; color:#9ab3ff}
   #ucs::before{content:""; position:absolute; width:2px; height:24px; background:#89a7ff; bottom:12px; left:32px}
   #ucs::after{content:""; position:absolute; height:2px; width:24px; background:#89a7ff; bottom:32px; left:12px}
+
   #navBar{position:absolute; right:10px; top:10px; width:56px; display:flex; flex-direction:column; gap:.4rem}
   .nav-btn{height:40px; border:1px solid #2a3358; border-radius:.45rem; background:#0f1428cc; color:#e6eeff; cursor:pointer}
-  #sideDrawer{position:absolute; right:72px; top:10px; bottom:56px; width:300px; background:#0f1426; border:1px solid #1e2335; border-radius:.6rem; padding:.6rem; overflow:auto; display:none}
+
+  #sideDrawer{position:absolute; right:72px; top:10px; bottom:calc(var(--modeltabs-h) + var(--status-h) + 10px); width:300px; background:#0f1426; border:1px solid #1e2335; border-radius:.6rem; padding:.6rem; overflow:auto; display:none}
   #sideDrawer h3{margin:.6rem 0 .4rem; font-size:1rem; color:#cfe3ff}
   #sideDrawer .row{display:flex; align-items:center; justify-content:space-between; margin:.25rem 0; gap:.4rem}
   #sideDrawer input[type="color"]{width:36px; height:24px; border:1px solid #2a3358; background:#0b0e14}
   #sideDrawer select, #sideDrawer input[type="text"], #sideDrawer input[type="number"]{flex:1; background:#101425; color:#e6e6e6; border:1px solid #1e2436; border-radius:.25rem; padding:.25rem .35rem}
   .hint{color:#94a3b8; font-size:12px; margin-top:.35rem}
+
   #hud{
     position:absolute; pointer-events:none; display:none;
     background:var(--hud); color:#e4eeff; border:1px solid var(--hud-border); border-radius:.4rem; padding:.25rem .35rem; font:12px/1.2 monospace; min-width:120px; z-index:8;
@@ -73,17 +85,43 @@
   #hud .row{display:flex; justify-content:space-between; gap:.4rem}
   #hud .key{color:#9ab3ff}
   #hud .active{outline:1px dashed #7db6ff; outline-offset:2px; border-radius:.2rem; padding:0 2px;}
-  #err{position:absolute; left:8px; bottom:56px; background:#330d10; color:#ffd7d7; border:1px solid #5a1e1e; padding:.4rem .5rem; border-radius:.4rem; font:12px/1.2 monospace; display:none; max-width:90vw; white-space:pre-wrap; z-index:50}
+  #err{position:absolute; left:8px; bottom:calc(var(--modeltabs-h) + var(--status-h) + 8px); background:#330d10; color:#ffd7d7; border:1px solid #5a1e1e; padding:.4rem .5rem; border-radius:.4rem; font:12px/1.2 monospace; display:none; max-width:90vw; white-space:pre-wrap; z-index:50}
+
   #modelTabs{grid-area:modellayout; display:flex; align-items:center; gap:.25rem; padding:0 .5rem; background:#0e1324; border-top:1px solid #1a2040; border-bottom:1px solid #1a2040}
   .mltab{height:24px; display:flex; align-items:center; padding:0 .6rem; background:#151a31; color:#dce6ff; border:1px solid #273056; border-radius:.35rem; cursor:pointer}
   .mltab.active{background:#10162c; font-weight:600}
-  #statusBar{grid-area:status; position:relative; display:flex; align-items:center; gap:.5rem; padding:0 .5rem; background:#0e1324; border-top:1px solid var(--stroke); color:#9aa4b2; font:14px/1.2 monospace}
-  #cliWrap{position:absolute; left:50%; transform:translateX(-50%); display:flex; align-items:flex-start; gap:.25rem}
-  #cmdHistory{max-width:44vw; max-height:34px; overflow:hidden; color:#9db0cc; opacity:.7; font-size:12px; line-height:1.2}
-  #cmdInput{width:380px; background:#0b0f1f; color:#f2f6ff; border:1px solid #263050; border-radius:.35rem; padding:.25rem .45rem; font:14px/1.2 monospace; margin-top:2px}
+
+  #statusBar{
+    grid-area:status;
+    position:fixed; left:0; right:0; bottom:0; height:var(--status-h);
+    display:flex; align-items:center; gap:.5rem; padding:0 .5rem;
+    background:#0e1324; border-top:1px solid var(--stroke); color:#9aa4b2; font:14px/1.2 monospace;
+    z-index:12;
+  }
+
+  /* Command line 50px above bottom */
+  #cliWrap{
+    position:fixed; left:50%; transform:translateX(-50%);
+    bottom:50px;
+    display:flex; flex-direction:column; align-items:stretch; gap:.25rem;
+    z-index:15;
+  }
+  #cliBar{
+    display:flex; align-items:center; gap:.25rem;
+    padding:.35rem; border:1px solid #263050; border-radius:.5rem;
+    background:#0b0f1fcc; backdrop-filter: blur(3px);
+    box-shadow:0 10px 24px rgba(0,0,0,.35);
+  }
+  #cmdInput{width:420px; background:#0b0f1f; color:#f2f6ff; border:1px solid #263050; border-radius:.35rem; padding:.35rem .5rem; font:14px/1.2 monospace}
+  #cmdHistory{max-width:46vw; color:#9db0cc; font:12px/1.25 monospace; opacity:.9;}
+  .hist-line{opacity:.60}
+  .hist-line:nth-last-child(2){opacity:.45}
+  .hist-line:nth-last-child(3){opacity:.30}
+
   .st-right{margin-left:auto; display:flex; align-items:center; gap:.35rem}
   .st-toggle{height:26px; display:inline-flex; align-items:center; gap:.35rem; padding:0 .45rem; border:1px solid #263050; background:#121a30; border-radius:.35rem; cursor:pointer; user-select:none}
   .st-toggle input{accent-color:#7aa2ff}
+
   .ctxmenu{position:absolute; z-index:9999; min-width:220px; background:#0f1426; border:1px solid #2a3358; border-radius:.4rem; box-shadow:0 10px 30px rgba(0,0,0,.4); color:#e6eeff; font:13px/1.35 system-ui,Arial; user-select:none}
   .ctxmenu.hidden{display:none}
   .ctxmenu .item{display:flex; align-items:center; justify-content:space-between; gap:.6rem; padding:.4rem .6rem; cursor:pointer}
@@ -92,21 +130,21 @@
   .ctxmenu .sep{height:1px; background:#1e2335; margin:.35rem 0}
   .ctxmenu .label{pointer-events:none}
   .ctxmenu .accel{opacity:.7; font-family:monospace}
-  .ctxmenu .check{width:1rem; display:inline-block; text-align:center; opacity:.9}
   .ctxmenu .submenu::after{content:"▶"; opacity:.6; margin-left:.4rem}
   .ctxmenu .group{position:relative}
   .ctxmenu .group:hover > .submenu-panel{display:block}
   .ctxmenu .submenu-panel{display:none; position:absolute; top:-.4rem; left:100%; margin-left:.3rem; min-width:220px}
+
   .pill{padding:.1rem .4rem; border:1px solid #2a3046; border-radius:.4rem; background:#12182a; color:#fff}
+
   @media (max-width: 900px){
     #searchAll{min-width:140px}
-    #cmdInput{width:230px}
+    #cmdInput{width:260px}
     #sideDrawer{right:10px; width:85vw}
   }
-  /* Properties tab list styling */
+
   .props-list{margin:.2rem 0 0 1rem; padding:0; list-style:disc; color:#dce6ff}
   .props-list li{margin:.15rem 0; font-size:.9rem}
-  .props-note{white-space:pre-wrap; color:#cfd7ff; font-size:.92rem; line-height:1.35}
 </style>
 </head>
 <body>
@@ -126,7 +164,7 @@
 
   <div id="titlebar" class="bar">
     <div class="title-left">
-      <span class="pill">Home</span>
+      <span class="pill" id="tabNamePill">Home</span>
     </div>
     <div class="title-center" id="titleFile">Mini-CAD — Drawing1</div>
     <div class="title-right">
@@ -137,7 +175,7 @@
   </div>
 
   <div id="ribbon">
-    <div class="ribbon-tabs">
+    <div class="ribbon-tabs" id="ribbonTabs">
       <div class="ribbon-tab active" data-tab="home">Home</div>
       <div class="ribbon-tab" data-tab="insert">Insert</div>
       <div class="ribbon-tab" data-tab="annotate">Annotate</div>
@@ -147,7 +185,7 @@
       <div class="ribbon-tab" data-tab="properties">Properties</div>
     </div>
     <div class="ribbon-body" id="ribbonBody">
-      <!-- Home content loads here; captured on boot -->
+      <!-- HOME tool groups -->
       <div class="group" data-group="draw">
         <div class="grow">
           <button class="tool-btn active" id="tb-select" title="Select (V)">Sel</button>
@@ -305,12 +343,16 @@
     <div class="mltab">Layout2</div>
   </div>
 
-  <div id="statusBar">
-    <div>Mode: <span id="modeLbl" class="pill">Select</span> <span id="okpill2" class="pill" style="margin-left:.5rem"></span></div>
-    <div id="cliWrap">
-      <div id="cmdHistory"></div>
-      <input id="cmdInput" type="text" placeholder="Command: L, PL, A, C, REC, TR, PO, T, MI, O, S, CHA, M, CO, RO, SC, E, Z, BMAKE, BINS, EXPLODE, M2P, PROPS, PROPERTIES/PR" />
+  <div id="cliWrap">
+    <div id="cliBar">
+      <input id="cmdInput" type="text" placeholder="Command: L, PL, A, C, REC, TR, PO, T, MI, O, S, CHA, M, CO, RO, SC, E, Z, BMAKE, BINS, EXPLODE, M2P, PROPERTIES" />
+      <span id="okpill2" class="pill"></span>
     </div>
+    <div id="cmdHistory"></div>
+  </div>
+
+  <div id="statusBar">
+    <div>Mode: <span id="modeLbl" class="pill">Select</span></div>
     <div class="st-right">
       <label class="st-toggle" title="Show Grid">
         <input type="checkbox" id="showGrid" checked /> Grid
@@ -348,9 +390,6 @@
 </div>
 
 <script>
-/* ==========================================================
-   Mini-CAD Engine (AutoCAD-style UI shell) — Single-file build
-   ========================================================== */
 (function(){
   const okPill  = document.getElementById('okpill');
   const okPill2 = document.getElementById('okpill2');
@@ -394,6 +433,74 @@
       pickOverride:null,
       units:'unitless'
     };
+
+    /* ---------- Ribbon engine ---------- */
+    const ribbonBody = document.getElementById('ribbonBody');
+    const HOME_HTML  = ribbonBody.innerHTML;
+
+    function renderPropertiesTab(){
+      const html = `
+        <div class="group" data-group="props-actions">
+          <div class="grow">
+            <button class="tool-btn" id="propsOpenDrawer">Toggle Drawer</button>
+            <button class="tool-btn" id="propsApply">Apply to Selection</button>
+          </div>
+          <div class="gtitle">Properties — Actions</div>
+        </div>
+
+        <div class="group" data-group="props-info" style="min-width:420px;max-width:680px">
+          <div class="grow" style="padding:.5rem;color:#cfe3ff">
+            Ctrl+1 or type <b>PROPERTIES</b> to open the drawer. Use the right panel to change layer, color, and linetype for the current selection.
+          </div>
+          <div class="gtitle">About Properties</div>
+        </div>
+
+        <div class="group">
+          <div class="grow"><ul class="props-list">
+            <li>General: Color, Layer, Linetype, Lineweight, Transparency</li>
+            <li>Geom (by type): Line, Circle, Polyline, Hatch</li>
+            <li>Text/Blocks/Dimensions specific fields</li>
+            <li>3D Visualization: Material, Shadows (placeholder)</li>
+          </ul></div>
+          <div class="gtitle">What you can edit</div>
+        </div>
+      `;
+      ribbonBody.innerHTML = html;
+      const btnOpen = document.getElementById('propsOpenDrawer');
+      const btnApply= document.getElementById('propsApply');
+      if(btnOpen) btnOpen.onclick = ()=> toggleDrawer(true);
+      if(btnApply) btnApply.onclick= ()=> toggleDrawer(true);
+    }
+
+    function renderPlaceholderTab(name){
+      ribbonBody.innerHTML = `
+        <div class="group">
+          <div class="grow" style="padding:.5rem;color:#aab6d8">No tools in the <b>${name}</b> tab yet.</div>
+          <div class="gtitle">${name}</div>
+        </div>
+      `;
+    }
+
+    function setActiveTab(key){
+      document.getElementById('tabNamePill').textContent = key.charAt(0).toUpperCase()+key.slice(1);
+      document.querySelectorAll('.ribbon-tab').forEach(x=>{
+        x.classList.toggle('active', x.dataset.tab===key);
+      });
+      if(key==='home'){
+        ribbonBody.innerHTML = HOME_HTML;
+        wireToolbarButtons();
+        return;
+      }
+      if(key==='properties'){ renderPropertiesTab(); return; }
+      renderPlaceholderTab(key.charAt(0).toUpperCase()+key.slice(1));
+    }
+    window.setActiveTab = setActiveTab;
+
+    // Event delegation for tabs
+    document.getElementById('ribbonTabs').addEventListener('click', (e)=>{
+      const t = e.target.closest('.ribbon-tab');
+      if(t && t.dataset && t.dataset.tab){ setActiveTab(t.dataset.tab); }
+    });
 
     /* ---------- HUD ---------- */
     const hud = document.getElementById('hud');
@@ -527,7 +634,8 @@
       const s=w2s(te.pos.x, te.pos.y);
       ctx.save();
       ctx.fillStyle = te.color || currentLayerColor(te.layer) || '#e0e6ff';
-      ctx.font = (Math.max(10, te.size*state.scale/2)|0)+'px Arial';
+      const px = (Math.max(10, (te.size||16)*state.scale/2)|0);
+      ctx.font = px+'px Arial';
       ctx.textBaseline='alphabetic';
       ctx.fillText(te.text || 'TXT', s.x, s.y);
       ctx.restore();
@@ -796,7 +904,7 @@
         row.className='item'+(it.disabled?' disabled':'')+(it.submenu?' group':'');
         row.setAttribute('role','menuitem');
         const left=document.createElement('div');
-        const check=document.createElement('span'); check.className='check'; check.textContent = it.checked?'•':''; 
+        const check=document.createElement('span'); check.className='check'; check.textContent = it.checked?'•':'';
         const label=document.createElement('span'); label.className='label'; label.textContent=it.label||'';
         left.appendChild(check); left.appendChild(label);
         const right=document.createElement('div');
@@ -859,8 +967,10 @@
       if(!state.action || !state.action.pts) return;
       if(state.action.pts.length>0){ state.action.pts.pop(); state.dyn.lastBase = state.action.pts[state.action.pts.length-1] || null; draw(); }
     }
+
+    // FIXED: no duplicate const names here
     function buildAutoCADStyleMenu(sx,sy){
-      const idx = hitIndexAtScreen(sx,sy);
+      const hitIdx = hitIndexAtScreen(sx,sy);
       const hasSel = selectionCount()>0;
       const drawing = isDrawing();
 
@@ -914,10 +1024,10 @@
       ];
 
       const objectGroup = [];
-      if(idx!==-1){
+      if(hitIdx!==-1){
         objectGroup.push(
-          {label:'Select/Deselect', action:()=>{ setSelected(idx, !state.drawing.selection[idx]); draw(); }},
-          {label:'Properties…', action:()=>{ toggleDrawer(true); }}
+          {label:'Select/Deselect', action:()=>{ setSelected(hitIdx, !state.drawing.selection[hitIdx]); draw(); }},
+          {label:'Properties…', action:()=>{ setActiveTab('properties'); toggleDrawer(true); }}
         );
       }
 
@@ -943,8 +1053,8 @@
         {label:'Repeat ' + (state.lastCmd? state.lastCmd.toUpperCase() : 'Command'), accel:'Space', action:()=>{ if(state.lastCmd) startCmd(state.lastCmd); }},
         'sep'
       ];
-      const selOps = hasSel ? [
-        {label:'Properties…', action:()=>{ toggleDrawer(true); }},
+      const selOps = selectionCount()>0 ? [
+        {label:'Properties…', action:()=>{ setActiveTab('properties'); toggleDrawer(true); }},
         {label:'Erase', accel:'E', action:()=>startCmd('erase')},
         'sep'
       ] : [];
@@ -953,7 +1063,7 @@
         .concat(objectGroup.length? objectGroup.concat(['sep']) : [])
         .concat([
           {label:'Draw',   submenu:drawGroup},
-          {label:'Modify', submenu:modifyGroup, disabled:!hasSel},
+          {label:'Modify', submenu:modifyGroup, disabled:selectionCount()===0},
           {label:'Blocks', submenu:blockGroup},
           {label:'View',   submenu:viewGroup},
           {label:'Snaps',  submenu:snapGroup},
@@ -1158,28 +1268,15 @@
 
     /* ---------- Commands & keyboard ---------- */
     const cmdInput = document.getElementById('cmdInput');
-    const cmdHistory = document.getElementById('cmdHistory');
-    const cmdLog = []; // keep last 3 lines
-    function renderCmdLog(){
-      // show last 3, newest last, faint
-      cmdHistory.innerHTML = cmdLog.slice(-3).map((s,i)=> {
-        const idx = cmdLog.length-3+i+1;
-        return s ? `<div>${s}</div>` : '';
-      }).join('');
-    }
-    function pushHistory(line){ if(!line) return; cmdLog.push(line); if(cmdLog.length>60) cmdLog.shift(); renderCmdLog(); }
+    const cmdHistoryPane = document.getElementById('cmdHistory');
+    const historyLines = [];
+    function renderHistory(){ const last3 = historyLines.slice(-3); cmdHistoryPane.innerHTML = last3.map(line=>`<div class="hist-line">${line}</div>`).join(''); }
+    function pushHistory(line){ historyLines.push(line); renderHistory(); }
     function setMode(m){ state.mode=m; document.getElementById('modeLbl').textContent=m.charAt(0).toUpperCase()+m.slice(1); draw(); }
     function activateBtn(id){ document.querySelectorAll('.tool-btn').forEach(b=>b.classList.remove('active')); const el=document.getElementById(id); if(el) el.classList.add('active'); }
+
     function startCmd(name){
       state.lastCmd=name; pushHistory(name.toUpperCase());
-      if(name==='properties' || name==='pr'){ toggleDrawer(); cmdInput.value=''; return; }
-      if(name==='props'){
-        document.querySelector('.ribbon-tab.active')?.classList.remove('active');
-        document.querySelector('.ribbon-tab[data-tab="properties"]')?.classList.add('active');
-        renderTab('properties');
-        cmdInput.value=''; return;
-      }
-
       if(name==='point'){ setMode('point'); activateBtn('tb-point'); cmdInput.value=''; return; }
       if(name==='text'){ setMode('text'); activateBtn('tb-text'); cmdInput.value=''; return; }
       if(name==='arc3p' || name==='arc'){ setMode('arc3p'); activateBtn('tb-arc'); cmdInput.value=''; return; }
@@ -1208,7 +1305,9 @@
       if(name==='dist'){ alert('DIST: pick 2 points (use snaps).'); return; }
       if(name==='area'){ alert('AREA: select closed poly in future version.'); return; }
     }
+
     function ensureSelection(){ if(selectionIndices().length===0){ setMode('select'); } }
+
     function handleCmdEnter(txt){
       const t=(txt||'').trim().toLowerCase();
       if(state.action && state.action.type==='modify'){
@@ -1216,6 +1315,7 @@
         if(state.action.kind==='scale'){ const fac=parseFloat(t); if(isFinite(fac)){ applyScale(fac, state.action.base||{x:0,y:0}, false); state.action=null; draw(); pushHistory('Scale ×'+fac); return; } }
       }
       if(!t){ if(state.lastCmd) startCmd(state.lastCmd); return; }
+
       if(t==='po' || t==='point'){ startCmd('point'); return; }
       if(t==='t' || t==='text'){ startCmd('text'); return; }
       if(t==='a' || t==='arc'){ startCmd('arc3p'); return; }
@@ -1241,9 +1341,13 @@
       if(t==='id'){ startCmd('id'); return; }
       if(t==='dist'){ startCmd('dist'); return; }
       if(t==='area'){ startCmd('area'); return; }
-      if(t==='props'){ startCmd('props'); return; }
-      if(t==='pr' || t==='properties'){ startCmd('properties'); return; }
+
+      // Properties command: open tab and drawer
+      if(t==='properties' || t==='prop' || t==='props'){
+        setActiveTab('properties'); toggleDrawer(true); return;
+      }
     }
+
     cmdInput.addEventListener('keydown', function(e){
       if(e.key==='Enter'){ handleCmdEnter(cmdInput.value); cmdInput.value=''; }
       if(e.key==='Escape'){ cancelAction(); }
@@ -1254,6 +1358,8 @@
     });
 
     window.addEventListener('keydown', function(e){
+      if((e.ctrlKey||e.metaKey) && e.key==='1'){ e.preventDefault(); setActiveTab('properties'); toggleDrawer(true); return; }
+
       const tag=document.activeElement && document.activeElement.tagName ? document.activeElement.tagName.toLowerCase() : '';
       if(tag!=='input' && tag!=='textarea'){
         if(e.key==='E' || e.key==='e'){ state.pickOverride='end'; return; }
@@ -1270,14 +1376,13 @@
       if((e.ctrlKey||e.metaKey) && (e.key==='y' || (e.shiftKey && (e.key==='Z' || e.key==='z')))){ e.preventDefault(); redo(); }
       if((e.ctrlKey||e.metaKey) && (e.key==='s' || e.key==='S')){ e.preventDefault(); saveJSON(); }
       if((e.ctrlKey||e.metaKey) && (e.key==='o' || e.key==='O')){ e.preventDefault(); document.getElementById('fileInput').click(); }
-      if((e.ctrlKey||e.metaKey) && e.key==='1'){ e.preventDefault(); toggleDrawer(); } // Ctrl+1 → Properties drawer
       if(e.key==='F8'){ state.ortho=!state.ortho; document.getElementById('orthoLock').checked=state.ortho; }
       if(e.key==='v' || e.key==='V'){ setMode('select'); activateBtn('tb-select'); }
     });
 
     function cancelAction(){ state.action=null; disableDyn(); state.pickOverride=null; draw(); }
 
-    /* ---------- Modify (move/copy/rotate/scale) ---------- */
+    /* ---------- Modify ---------- */
     function applyTranslate(dx,dy, asCopy){
       snapshot();
       const idxs=selectionIndices();
@@ -1355,228 +1460,44 @@
       state.drawing.entities=keep; clearSelection(); draw();
     }
 
-    /* ---------- Toolbar wiring (Home tab) ---------- */
-    const q = sel=>document.querySelector(sel);
-    q('#tb-select').onclick=()=>{ setMode('select'); activateBtn('tb-select'); state.action=null; disableDyn(); };
-    q('#tb-point').onclick =()=> startCmd('point');
-    q('#tb-text').onclick  =()=> startCmd('text');
-    q('#tb-arc').onclick   =()=> startCmd('arc3p');
-    q('#tb-line').onclick  =()=> startCmd('line');
-    q('#tb-poly').onclick  =()=> startCmd('pline');
-    q('#tb-trace').onclick =()=> startCmd('trace');
-    q('#tb-rect').onclick  =()=> startCmd('rect');
-    q('#tb-circle').onclick=()=> startCmd('circle');
-    q('#tb-move').onclick  =()=> startCmd('move');
-    q('#tb-copy').onclick  =()=> startCmd('copy');
-    q('#tb-rotate').onclick=()=> startCmd('rotate');
-    q('#tb-scale').onclick =()=> startCmd('scale');
-    q('#tb-erase').onclick =()=> startCmd('erase');
-    q('#tb-mirror').onclick=()=> startCmd('mirror');
-    q('#tb-offset').onclick=()=> startCmd('offset');
-    q('#tb-stretch').onclick=()=> startCmd('stretch');
-    q('#tb-chamfer').onclick=()=> startCmd('chamfer');
-    q('#tb-pan').onclick   =()=> { setMode('pan'); activateBtn('tb-pan'); };
-    q('#tb-zoom-win').onclick=()=> { state.action={type:'zoomwin',stage:0}; activateBtn('tb-zoom-win'); };
-    q('#tb-zoom-prev').onclick=()=> zoomPrevious();
-    q('#tb-zoom-ext').onclick =()=> zoomExtents();
-    q('#tb-make-block').onclick=()=> startCmd('bmake');
-    q('#tb-insert-block').onclick=()=> startCmd('bins');
-    q('#tb-explode').onclick=()=> startCmd('explode');
-    q('#m2pBtn').onclick=()=> startCmd('m2p');
+    /* ---------- Toolbar wiring (Home) ---------- */
+    function wireToolbarButtons(){
+      const q = sel=>document.querySelector(sel);
+      if(!q('#tb-select')) return;
 
-    /* ---------- Unified Ribbon System ---------- */
-    const ribbonBody = document.getElementById('ribbonBody');
-    const HOME_HTML = ribbonBody.innerHTML;
+      q('#tb-select').onclick =()=>{ setMode('select'); activateBtn('tb-select'); state.action=null; disableDyn(); };
+      q('#tb-point').onclick  =()=> startCmd('point');
+      q('#tb-text').onclick   =()=> startCmd('text');
+      q('#tb-arc').onclick    =()=> startCmd('arc3p');
+      q('#tb-line').onclick   =()=> startCmd('line');
+      q('#tb-poly').onclick   =()=> startCmd('pline');
+      q('#tb-trace').onclick  =()=> startCmd('trace');
+      q('#tb-rect').onclick   =()=> startCmd('rect');
+      q('#tb-circle').onclick =()=> startCmd('circle');
 
-    // Copied text for properties
-    const PROPS_TEXT = `The AutoCAD Properties box, officially called the Properties Palette, is a crucial tool that allows you to view and modify the properties of selected objects. Its functions are contextual, meaning the information it displays changes depending on what object (or objects) you have selected.
+      q('#tb-move').onclick   =()=> startCmd('move');
+      q('#tb-copy').onclick   =()=> startCmd('copy');
+      q('#tb-rotate').onclick =()=> startCmd('rotate');
+      q('#tb-scale').onclick  =()=> startCmd('scale');
+      q('#tb-erase').onclick  =()=> startCmd('erase');
+      q('#tb-mirror').onclick =()=> startCmd('mirror');
+      q('#tb-offset').onclick =()=> startCmd('offset');
+      q('#tb-stretch').onclick=()=> startCmd('stretch');
+      q('#tb-chamfer').onclick=()=> startCmd('chamfer');
 
-General Properties
-This is the most common section and applies to almost every object. Key functions here include:
+      q('#tb-pan').onclick      =()=> { setMode('pan'); activateBtn('tb-pan'); };
+      q('#tb-zoom-win').onclick =()=> { state.action={type:'zoomwin',stage:0}; activateBtn('tb-zoom-win'); };
+      q('#tb-zoom-prev').onclick=()=>  zoomPrevious();
+      q('#tb-zoom-ext').onclick =()=>  zoomExtents();
 
-Color: Changes the color of the object.
-
-Layer: Assigns the object to a different layer. This is a fundamental way to organize your drawing.
-
-Linetype: Changes the appearance of the line (e.g., from solid to dashed or dotted).
-
-Linetype Scale: Adjusts the size of the pattern in the linetype.
-
-Lineweight: Sets the thickness of the line when plotted or displayed.
-
-Transparency: Makes the object see-through to varying degrees.
-
-Hyperlink: Attaches a URL or file path to an object.
-
-Geometric Properties
-This section deals with the object's size, shape, and position in the drawing. The specific properties shown depend entirely on the selected object.
-
-For a Line: You'll see its Start X/Y/Z and End X/Y/Z coordinates, as well as its Length and Angle.
-
-For a Circle: You'll find its Center X/Y/Z coordinates, Radius, Diameter, Circumference, and Area.
-
-For a Polyline: It shows whether it's Closed or Open, its Global Width, and its total Length.
-
-For a Hatch: You can change its Pattern Name, Angle, and Scale.
-
-Miscellaneous Properties
-This category contains additional settings that are specific to the object type.
-
-For Text (MText/DText): You can change the Contents (the actual text), Style, Justification, Height, and Rotation.
-
-For Blocks: You can modify the Block Name, Scale (X, Y, Z), and Rotation. If the block has attributes, you can edit their values here.
-
-For Dimensions: You can adjust the Dimension Style, Arrowheads, and override the Text Measurement.
-
-3D Visualization
-When working with 3D objects, this section becomes available.
-
-Material: Assigns a material for rendering (e.g., wood, metal, glass).
-
-Shadow Display: Controls how the object casts and receives shadows.
-
-In short, the Properties Palette is your central command center for editing the specific details of any object in your drawing without needing to use multiple commands. You can open it by typing PROPERTIES in the command line or by pressing Ctrl + 1.
-`;
-
-    const PROPERTIES_TAB_FUNCTIONS = [
-      {
-        title: 'General',
-        items: ['Color','Layer','Linetype','Linetype scale','Lineweight','Transparency','Hyperlink']
-      },
-      {
-        title: 'Geometric',
-        items: [
-          'Line: Start/End XYZ, Length, Angle',
-          'Circle: Center XYZ, Radius, Diameter, Circumference, Area',
-          'Polyline: Closed/Open, Global Width, Length',
-          'Hatch: Pattern name, Angle, Scale'
-        ]
-      },
-      {
-        title: 'Miscellaneous',
-        items: [
-          'Text: Contents, Style, Justification, Height, Rotation',
-          'Blocks: Name, Scale (X/Y/Z), Rotation, Attributes',
-          'Dimensions: Style, Arrowheads, Text override'
-        ]
-      },
-      { title: '3D Visualization', items: ['Material','Shadow display'] }
-    ];
-    window.PROPERTIES_TAB_FUNCTIONS = PROPERTIES_TAB_FUNCTIONS;
-
-    function wireRibbonHomeButtons(){
-      const bind=(id, fn)=>{ const el=document.getElementById(id); if(el) el.onclick = fn; };
-      bind('tb-select', ()=>{ setMode('select'); activateBtn('tb-select'); state.action=null; disableDyn(); });
-      bind('tb-point',  ()=> startCmd('point'));
-      bind('tb-line',   ()=> startCmd('line'));
-      bind('tb-arc',    ()=> startCmd('arc3p'));
-      bind('tb-poly',   ()=> startCmd('pline'));
-      bind('tb-rect',   ()=> startCmd('rect'));
-      bind('tb-circle', ()=> startCmd('circle'));
-      bind('tb-trace',  ()=> startCmd('trace'));
-      bind('tb-text',   ()=> startCmd('text'));
-
-      bind('tb-erase',  ()=> startCmd('erase'));
-      bind('tb-mirror', ()=> startCmd('mirror'));
-      bind('tb-offset', ()=> startCmd('offset'));
-      bind('tb-stretch',()=> startCmd('stretch'));
-      bind('tb-chamfer',()=> startCmd('chamfer'));
-      bind('tb-move',   ()=> startCmd('move'));
-      bind('tb-copy',   ()=> startCmd('copy'));
-      bind('tb-rotate', ()=> startCmd('rotate'));
-      bind('tb-scale',  ()=> startCmd('scale'));
-
-      bind('tb-make-block',   ()=> startCmd('bmake'));
-      bind('tb-insert-block', ()=> startCmd('bins'));
-      bind('tb-explode',      ()=> startCmd('explode'));
-
-      bind('tb-pan',      ()=>{ setMode('pan'); activateBtn('tb-pan'); });
-      bind('tb-zoom-win', ()=>{ state.action={type:'zoomwin',stage:0}; activateBtn('tb-zoom-win'); });
-      bind('tb-zoom-prev',()=> zoomPrevious());
-      bind('tb-zoom-ext', ()=> zoomExtents());
-
-      bind('m2pBtn', ()=> startCmd('m2p'));
-      bind('toggleDrawer', ()=> toggleDrawer());
-      bind('forceRedraw', ()=> draw());
-      bind('resetView',   ()=> zoomExtents());
+      q('#tb-make-block').onclick =()=> startCmd('bmake');
+      q('#tb-insert-block').onclick=()=> startCmd('bins');
+      q('#tb-explode').onclick     =()=> startCmd('explode');
+      const m2p = document.getElementById('m2pBtn'); if(m2p) m2p.onclick=()=> startCmd('m2p');
     }
+    wireToolbarButtons();
 
-    function renderPropertiesTab(){
-      let html = `
-        <div class="group" data-group="props-actions">
-          <div class="grow">
-            <button class="tool-btn" id="propsOpenDrawer">Toggle Drawer</button>
-            <button class="tool-btn" id="propsApply">Apply to Selection</button>
-          </div>
-          <div class="gtitle">Properties — Actions</div>
-        </div>
-
-        <div class="group" data-group="props-info" style="min-width:420px; max-width:640px">
-          <div class="props-note">${PROPS_TEXT.replace(/\n/g,'<br/>')}</div>
-          <div class="gtitle">What is the Properties Palette?</div>
-        </div>
-      `;
-      for(const sec of PROPERTIES_TAB_FUNCTIONS){
-        html += `
-          <div class="group" data-group="props-${sec.title.toLowerCase().replace(/\s+/g,'-')}">
-            <div class="grow">
-              <ul class="props-list">
-                ${sec.items.map(it=>`<li>${it}</li>`).join('')}
-              </ul>
-            </div>
-            <div class="gtitle">${sec.title} Properties</div>
-          </div>
-        `;
-      }
-      ribbonBody.innerHTML = html;
-      const btnOpen = document.getElementById('propsOpenDrawer');
-      if(btnOpen) btnOpen.onclick = ()=> toggleDrawer();
-      const btnApply = document.getElementById('propsApply');
-      if(btnApply) btnApply.onclick = ()=> toggleDrawer(true);
-    }
-
-    function renderPlaceholderTab(name){
-      ribbonBody.innerHTML = `
-        <div class="group">
-          <div class="grow" style="padding:.4rem .2rem; color:#aab6d8">
-            No tools in the <b>${name}</b> tab yet.
-          </div>
-          <div class="gtitle">${name}</div>
-        </div>
-      `;
-    }
-
-    function renderTab(key){
-      switch(key){
-        case 'home':
-          ribbonBody.innerHTML = HOME_HTML;
-          wireRibbonHomeButtons();
-          break;
-        case 'properties':
-          renderPropertiesTab();
-          break;
-        case 'insert':
-        case 'annotate':
-        case 'view':
-        case 'manage':
-        case 'express':
-          renderPlaceholderTab(key.charAt(0).toUpperCase() + key.slice(1));
-          break;
-        default:
-          ribbonBody.innerHTML = HOME_HTML;
-          wireRibbonHomeButtons();
-      }
-    }
-
-    document.querySelectorAll('.ribbon-tab').forEach(t=>{
-      t.addEventListener('click', ()=>{
-        document.querySelectorAll('.ribbon-tab').forEach(x=>x.classList.remove('active'));
-        t.classList.add('active');
-        renderTab(t.dataset.tab);
-      });
-    });
-
-    /* ---------- Properties drawer toggle ---------- */
+    /* ---------- Side drawer toggle ---------- */
     const sideDrawer = document.getElementById('sideDrawer');
     function toggleDrawer(forceOpen){
       if(forceOpen===true){ sideDrawer.style.display='block'; return; }
@@ -1584,6 +1505,7 @@ In short, the Properties Palette is your central command center for editing the 
     }
     document.getElementById('toggleDrawer').onclick=()=>toggleDrawer();
 
+    /* ---------- App bar & status bar controls ---------- */
     document.getElementById('openBtn').onclick =()=> document.getElementById('fileInput').click();
     document.getElementById('saveBtn').onclick =()=> saveJSON();
     document.getElementById('saveDxfBtn').onclick=()=> saveDXF();
@@ -1668,7 +1590,7 @@ In short, the Properties Palette is your central command center for editing the 
     }
     function rememberView(){ state.viewPrev={ox:state.ox, oy:state.oy, scale:state.scale}; }
     function zoomExtents(){
-      const pad=40; // pixels of padding
+      const pad=40;
       const rect=canvas.getBoundingClientRect();
       if(state.drawing.entities.length===0){ state.scale=1; state.ox=rect.width/2; state.oy=rect.height/2; draw(); return; }
       let minX=+1e9,minY=+1e9,maxX=-1e9,maxY=-1e9;
@@ -1718,10 +1640,8 @@ In short, the Properties Palette is your central command center for editing the 
       const t=u, one=1-t;
       const Qx = 2*mid.x - 0.5*(st.x+en.x);
       const Qy = 2*mid.y - 0.5*(st.y+en.y);
-      return {
-        x: one*one*st.x + 2*one*t*Qx + t*t*en.x,
-        y: one*one*st.y + 2*one*t*Qy + t*t*en.y
-      };
+      return { x: one*one*st.x + 2*one*t*Qx + t*t*en.x,
+               y: one*one*st.y + 2*one*t*Qy + t*t*en.y };
     }
 
     /* ===== Move/Copy/Rotate/Scale base-pick ===== */
@@ -1741,7 +1661,7 @@ In short, the Properties Palette is your central command center for editing the 
       }
     }, {capture:true});
 
-    /* ===== M2P (mid between 2 points) ===== */
+    /* ===== M2P ===== */
     function startM2P(){
       pushHistory('M2P: pick first point');
       let step=0, A=null;
@@ -1853,7 +1773,6 @@ In short, the Properties Palette is your central command center for editing the 
       ev.target.value='';
     }
     function saveDXF(){
-      // Minimal DXF writer: exports polylines only
       const lines=[];
       function push(k,v){ lines.push(String(k)); lines.push(String(v)); }
       push(0,'SECTION'); push(2,'ENTITIES');
@@ -1876,13 +1795,7 @@ In short, the Properties Palette is your central command center for editing the 
     setCanvasSize();
     ensureLayer('0','#e0e6ff'); rebuildLayerUI(); rebuildBlockUI();
     okPill.textContent='OK ✓'; okPill2.textContent='Ready';
-
-    // Initialize ribbon on load
-    renderTab('home');
-    // Show a helpful tip in history
-    pushHistory('Tip: type PROPS to open the Properties tab; PR to toggle the drawer');
-
-  } catch(ex){
+   } catch(ex){
     showErr(ex.message||ex);
   }
 })();
