@@ -61,6 +61,23 @@
       "left mid"
       "right right"
       "bot bot";}
+    /* --- Context Menu --- */
+.ctxmenu{position:absolute; z-index:9999; min-width:220px;
+  background:#0f1426; border:1px solid #2a3358; border-radius:.4rem;
+  box-shadow:0 10px 30px rgba(0,0,0,.4); color:#e6eeff; font:13px/1.35 system-ui,Arial; user-select:none}
+.ctxmenu.hidden{display:none}
+.ctxmenu .item{display:flex; align-items:center; justify-content:space-between; gap:.6rem; padding:.4rem .6rem; cursor:pointer}
+.ctxmenu .item:hover{background:#182142}
+.ctxmenu .item.disabled{opacity:.5; cursor:default}
+.ctxmenu .sep{height:1px; background:#1e2335; margin:.35rem 0}
+.ctxmenu .label{pointer-events:none}
+.ctxmenu .accel{opacity:.7; font-family:monospace}
+.ctxmenu .check{width:1rem; display:inline-block; text-align:center; opacity:.9}
+.ctxmenu .submenu::after{content:"▶"; opacity:.6; margin-left:.4rem}
+.ctxmenu .group{position:relative}
+.ctxmenu .group:hover > .submenu-panel{display:block}
+.ctxmenu .submenu-panel{display:none; position:absolute; top:-.4rem; left:100%;
+  margin-left:.3rem; min-width:220px}
   }
 </style>
 </head>
@@ -158,6 +175,8 @@
       <div class="row small"><span>hint</span><span>Tab switch · Enter accept</span></div>
     </div>
     <pre id="err"></pre>
+    <div id="ctx" class="ctxmenu hidden" role="menu" aria-hidden="true"></div>
+
   </div>
 
   <aside id="right">
@@ -297,6 +316,69 @@
       ctx.setTransform(dpr,0,0,dpr,0,0);
       if(state.ox===0 && state.oy===0){ state.ox=rect.width/2; state.oy=rect.height/2; state.scale=1.0; }
       draw();
+      // ---------- Context Menu Core ----------
+var ctxMenu = document.getElementById('ctx');
+var ctxOpen = false;
+
+function hideCtx(){
+  if(!ctxOpen) return;
+  ctxOpen=false;
+  ctxMenu.classList.add('hidden');
+  ctxMenu.innerHTML='';
+  ctxMenu.setAttribute('aria-hidden','true');
+}
+
+function showCtx(x,y, items){
+  buildCtxDom(items, ctxMenu);
+  positionCtx(x,y);
+  ctxOpen=true;
+  ctxMenu.classList.remove('hidden');
+  ctxMenu.setAttribute('aria-hidden','false');
+}
+
+function positionCtx(x,y){
+  var rect = canvas.getBoundingClientRect();
+  var vw = rect.width, vh = rect.height;
+  // place inside canvas bounds
+  var px = Math.min(rect.right - 8 - ctxMenu.offsetWidth, rect.left + x);
+  var py = Math.min(rect.bottom - 8 - ctxMenu.offsetHeight, rect.top + y);
+  // convert to page coords
+  ctxMenu.style.left = px + 'px';
+  ctxMenu.style.top  = py + 'px';
+}
+
+function buildCtxDom(items, root){
+  root.innerHTML='';
+  root.className='ctxmenu';
+  (items||[]).forEach(function(it){
+    if(it === 'sep'){ var sep=document.createElement('div'); sep.className='sep'; root.appendChild(sep); return; }
+    var row=document.createElement('div');
+    row.className='item'+(it.disabled?' disabled':'')+(it.submenu?' group':'');
+    row.setAttribute('role','menuitem');
+    var left=document.createElement('div');
+    var check=document.createElement('span'); check.className='check'; check.textContent = it.checked?'•':'';
+    var label=document.createElement('span'); label.className='label'; label.textContent=it.label||'';
+    left.appendChild(check); left.appendChild(label);
+    var right=document.createElement('div');
+    right.className='accel';
+    if(it.accel) right.textContent=it.accel;
+    if(it.submenu){ var caret=document.createElement('span'); caret.className='submenu'; right.appendChild(caret); }
+    row.appendChild(left); row.appendChild(right);
+    if(!it.disabled && it.action){ row.addEventListener('click', function(ev){ ev.stopPropagation(); hideCtx(); try{ it.action(); }catch(_){} }); }
+    if(it.submenu){
+      var panel=document.createElement('div'); panel.className='ctxmenu submenu-panel hidden';
+      buildCtxDom(it.submenu, panel);
+      row.appendChild(panel);
+      row.addEventListener('mouseenter', function(){ panel.classList.remove('hidden'); });
+      row.addEventListener('mouseleave', function(){ panel.classList.add('hidden'); });
+    }
+    root.appendChild(row);
+  });
+}
+window.addEventListener('click', hideCtx);
+window.addEventListener('blur', hideCtx);
+window.addEventListener('keydown', function(e){ if(e.key==='Escape') hideCtx(); });
+
     }
     function w2s(x,y){ return {x:x*state.scale+state.ox, y:-y*state.scale+state.oy}; }
     function s2w(sx,sy){ return {x:(sx-state.ox)/state.scale, y:-(sy-state.oy)/state.scale}; }
@@ -636,7 +718,154 @@
     // ---- Mouse/Touch ----
     var isPanning=false, panX0=0, panY0=0, ox0=0, oy0=0;
     var dragGrip=null;
-    canvas.addEventListener('contextmenu', function(e){ e.preventDefault(); return false; });
+    canvas.addEventListener('contextmenu', function(e){
+  e.preventDefault();
+  var rect=canvas.getBoundingClientRect();
+  var sx=e.clientX-rect.left, sy=e.clientY-rect.top;
+  var w=s2w(sx,sy);
+  state.mouse.x=sx; state.mouse.y=sy; state.mouse.wx=w.x; state.mouse.wy=w.y; // keep HUD in sync
+  var items = buildAutoCADStyleMenu(sx,sy);
+  showCtx(e.clientX, e.clientY, items);
+  return false;
+});
+    function isDrawing(){
+  return state.action && (
+    state.action.type==='drawLine' || state.action.type==='drawPoly' ||
+    state.action.type==='drawRect' || state.action.type==='drawCircle' ||
+    state.action.type==='arc3p' || state.action.type==='zoomwin'
+  );
+}
+function selectionCount(){ return selectionIndices().length; }
+function hitIndexAtScreen(sx,sy){ return hitEntityAt(sx,sy); }
+
+function finishCurrent(){
+  // gracefully finish draw tools like AutoCAD "Enter"
+  if(!state.action) return;
+  if(state.action.type==='drawPoly' && state.action.pts.length>=2){
+    snapshot(); state.drawing.entities.push({type:'poly', pts:state.action.pts.slice(0), closed:false, layer:state.currentLayer});
+    state.action=null; disableDyn(); draw(); return;
+  }
+  if(state.action.type==='drawLine' && state.action.pts && state.action.pts.length===2){
+    snapshot(); state.drawing.entities.push({type:'poly', pts:[state.action.pts[0], state.action.pts[1]], closed:false, layer:state.currentLayer});
+    state.action=null; disableDyn(); draw(); return;
+  }
+  // rect/circle need exactly 2 picks; if mid, cancel for safety
+  if(state.action.type==='drawRect' || state.action.type==='drawCircle'){ cancelAction(); return; }
+  if(state.action.type==='arc3p'){ cancelAction(); return; }
+}
+
+function undoLastVertex(){
+  if(!state.action || !state.action.pts) return;
+  if(state.action.pts.length>0){ state.action.pts.pop(); state.dyn.lastBase = state.action.pts[state.action.pts.length-1] || null; draw(); }
+}
+
+function buildAutoCADStyleMenu(sx,sy){
+  var idx = hitIndexAtScreen(sx,sy);
+  var hasSel = selectionCount()>0;
+  var drawing = isDrawing();
+
+  // Common toggles
+  var snaps = state.snaps;
+  var drawGroup = [
+    {label:'Line',   accel:'L', action:()=>startCmd('line')},
+    {label:'Polyline', accel:'PL', action:()=>startCmd('pline')},
+    {label:'Rectangle', accel:'REC', action:()=>startCmd('rect')},
+    {label:'Circle', accel:'C', action:()=>startCmd('circle')},
+    {label:'Arc (3-Point)', accel:'A', action:()=>startCmd('arc3p')},
+    {label:'Text', accel:'T', action:()=>startCmd('text')}
+  ];
+  var modifyGroup = [
+    {label:'Move', accel:'M', action:()=>startCmd('move'), disabled:!hasSel},
+    {label:'Copy', accel:'CO', action:()=>startCmd('copy'), disabled:!hasSel},
+    {label:'Rotate', accel:'RO', action:()=>startCmd('rotate'), disabled:!hasSel},
+    {label:'Scale', accel:'SC', action:()=>startCmd('scale'), disabled:!hasSel},
+    {label:'Erase', accel:'E', action:()=>startCmd('erase'), disabled:!hasSel},
+  ];
+  var blockGroup = [
+    {label:'Make Block', accel:'B', action:()=>startCmd('bmake'), disabled:!hasSel},
+    {label:'Insert Block', accel:'I', action:()=>startCmd('bins')},
+    {label:'Explode', accel:'X', action:()=>startCmd('explode'), disabled:!hasSel}
+  ];
+  var snapGroup = [
+    {label:'Snap Grid', checked:snaps.grid, action:()=>{snaps.grid=!snaps.grid; draw();}},
+    {label:'Snap End',  checked:snaps.ends, action:()=>{snaps.ends=!snaps.ends; draw();}},
+    {label:'Snap Mid',  checked:snaps.mids, action:()=>{snaps.mids=!snaps.mids; draw();}},
+    {label:'Snap Int',  checked:snaps.inters, action:()=>{snaps.inters=!snaps.inters; draw();}},
+    'sep',
+    {label:'Force End (E)', accel:'E', action:()=>{state.pickOverride='end';}},
+    {label:'Force Mid (M)', accel:'M', action:()=>{state.pickOverride='mid';}},
+    {label:'Force Int (I)', accel:'I', action:()=>{state.pickOverride='int';}}
+  ];
+  var viewGroup = [
+    {label:'Pan', accel:'Middle/RMB drag', action:()=>{ setMode('pan'); activateBtn('tb-pan'); }},
+    {label:'Zoom Window', accel:'Z→W', action:()=>{ state.action={type:'zoomwin',stage:0}; activateBtn('tb-zoom-win'); }},
+    {label:'Zoom Previous', accel:'Z→P', action:()=>{ zoomPrevious(); }},
+    {label:'Zoom Extents', accel:'Z→E', action:()=>{ zoomExtents(); }},
+    'sep',
+    {label:'Grid Display', checked:state.showGrid, action:()=>{ state.showGrid=!state.showGrid; document.getElementById('showGrid').checked=state.showGrid; draw(); }},
+    {label:'Ortho (F8)', checked:state.ortho, action:()=>{ state.ortho=!state.ortho; document.getElementById('orthoLock').checked=state.ortho; }}
+  ];
+  var unitsGroup = [
+    {label:'Unitless', checked:state.units==='unitless', action:()=>{ state.units='unitless'; document.getElementById('units').value='unitless'; draw(); }},
+    {label:'mm',       checked:state.units==='mm',       action:()=>{ state.units='mm'; document.getElementById('units').value='mm'; draw(); }},
+    {label:'cm',       checked:state.units==='cm',       action:()=>{ state.units='cm'; document.getElementById('units').value='cm'; draw(); }},
+    {label:'m',        checked:state.units==='m',        action:()=>{ state.units='m'; document.getElementById('units').value='m'; draw(); }},
+    {label:'inch',     checked:state.units==='inch',     action:()=>{ state.units='inch'; document.getElementById('units').value='inch'; draw(); }},
+    {label:'ft',       checked:state.units==='ft',       action:()=>{ state.units='ft'; document.getElementById('units').value='ft'; draw(); }}
+  ];
+
+  // “Object” group if clicked over something (quick select)
+  var objectGroup = [];
+  if(idx!==-1){
+    objectGroup.push(
+      {label:'Select/Deselect', action:()=>{ setSelected(idx, !state.drawing.selection[idx]); draw(); }},
+      {label:'Properties…', action:()=>{ document.getElementById('right').scrollTop = 0; document.getElementById('propColor').focus(); }}
+    );
+  }
+
+  // When drawing: offer Finish / Undo / Close (poly) / Temp Origin
+  if(drawing){
+    var canClose = state.action.type==='drawPoly' && state.action.pts && state.action.pts.length>=2;
+    return [
+      {label:'Finish', accel:'Enter', action:finishCurrent},
+      {label:'Undo last point', accel:'Backspace', action:undoLastVertex, disabled:!(state.action.pts && state.action.pts.length)},
+      canClose ? {label:'Close polyline', accel:'C (dbl-click)', action:()=>{ // close quickly
+        var pts = state.action.pts.slice(0); if(pts.length>=2){ pts.push(pts[0]); snapshot(); state.drawing.entities.push({type:'poly', pts:pts, closed:true, layer:state.currentLayer}); state.action=null; disableDyn(); draw(); }
+      }} : null,
+      {label:'Set Temporary Origin', accel:'Shift+O', action:()=>{ var snap=getSnap(state.mouse.wx,state.mouse.wy,state.mouse.x,state.mouse.y,state.pickOverride); state.dyn.lastBase = snap? {x:snap.x,y:snap.y}:{x:state.mouse.wx,y:state.mouse.wy}; draw(); }},
+      'sep',
+      {label:'Cancel', accel:'Esc', action:()=>{ cancelAction(); }},
+      'sep',
+      {label:'Snaps', submenu:snapGroup},
+      {label:'View',  submenu:viewGroup},
+      {label:'Units', submenu:unitsGroup}
+    ].filter(Boolean);
+  }
+
+  // Not drawing — general context
+  var top = [
+    {label:'Repeat ' + (state.lastCmd? state.lastCmd.toUpperCase() : 'Command'), accel:'Space', action:()=>{ if(state.lastCmd) startCmd(state.lastCmd); }},
+    'sep'
+  ];
+  var selOps = hasSel ? [
+    {label:'Properties…', action:()=>{ document.getElementById('right').scrollTop = 0; document.getElementById('propColor').focus(); }},
+    {label:'Erase', accel:'E', action:()=>startCmd('erase')},
+    'sep'
+  ] : [];
+
+  return top
+    .concat(objectGroup.length? objectGroup.concat(['sep']) : [])
+    .concat([
+      {label:'Draw',   submenu:drawGroup},
+      {label:'Modify', submenu:modifyGroup, disabled:!hasSel},
+      {label:'Blocks', submenu:blockGroup},
+      {label:'View',   submenu:viewGroup},
+      {label:'Snaps',  submenu:snapGroup},
+      {label:'Units',  submenu:unitsGroup},
+    ].map(x=>x))
+    .concat(selOps);
+}
+
 
     canvas.addEventListener('mousedown', function(e){
       var rect=canvas.getBoundingClientRect();
