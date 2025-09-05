@@ -24,6 +24,7 @@
       "drawing"
       "modellayout"
       "status";
+    min-height: 100vh;
   }
   .bar{display:flex; align-items:center; gap:.4rem; padding:0 .5rem; border-bottom:1px solid var(--stroke)}
   #appbar{grid-area:appbar; background:var(--bar)}
@@ -77,9 +78,9 @@
   .mltab{height:24px; display:flex; align-items:center; padding:0 .6rem; background:#151a31; color:#dce6ff; border:1px solid #273056; border-radius:.35rem; cursor:pointer}
   .mltab.active{background:#10162c; font-weight:600}
   #statusBar{grid-area:status; position:relative; display:flex; align-items:center; gap:.5rem; padding:0 .5rem; background:#0e1324; border-top:1px solid var(--stroke); color:#9aa4b2; font:14px/1.2 monospace}
-  #cliWrap{position:absolute; left:50%; transform:translateX(-50%); display:flex; align-items:center; gap:.25rem}
-  #cmdHistory{max-width:42vw; max-height:34px; overflow:hidden; color:#9db0cc}
-  #cmdInput{width:360px; background:#0b0f1f; color:#f2f6ff; border:1px solid #263050; border-radius:.35rem; padding:.25rem .45rem; font:14px/1.2 monospace}
+  #cliWrap{position:absolute; left:50%; transform:translateX(-50%); display:flex; align-items:flex-start; gap:.25rem}
+  #cmdHistory{max-width:44vw; max-height:34px; overflow:hidden; color:#9db0cc; opacity:.7; font-size:12px; line-height:1.2}
+  #cmdInput{width:380px; background:#0b0f1f; color:#f2f6ff; border:1px solid #263050; border-radius:.35rem; padding:.25rem .45rem; font:14px/1.2 monospace; margin-top:2px}
   .st-right{margin-left:auto; display:flex; align-items:center; gap:.35rem}
   .st-toggle{height:26px; display:inline-flex; align-items:center; gap:.35rem; padding:0 .45rem; border:1px solid #263050; background:#121a30; border-radius:.35rem; cursor:pointer; user-select:none}
   .st-toggle input{accent-color:#7aa2ff}
@@ -102,6 +103,10 @@
     #cmdInput{width:230px}
     #sideDrawer{right:10px; width:85vw}
   }
+  /* Properties tab list styling */
+  .props-list{margin:.2rem 0 0 1rem; padding:0; list-style:disc; color:#dce6ff}
+  .props-list li{margin:.15rem 0; font-size:.9rem}
+  .props-note{white-space:pre-wrap; color:#cfd7ff; font-size:.92rem; line-height:1.35}
 </style>
 </head>
 <body>
@@ -142,6 +147,7 @@
       <div class="ribbon-tab" data-tab="properties">Properties</div>
     </div>
     <div class="ribbon-body" id="ribbonBody">
+      <!-- Home content loads here; captured on boot -->
       <div class="group" data-group="draw">
         <div class="grow">
           <button class="tool-btn active" id="tb-select" title="Select (V)">Sel</button>
@@ -303,7 +309,7 @@
     <div>Mode: <span id="modeLbl" class="pill">Select</span> <span id="okpill2" class="pill" style="margin-left:.5rem"></span></div>
     <div id="cliWrap">
       <div id="cmdHistory"></div>
-      <input id="cmdInput" type="text" placeholder="Command: L, PL, A, C, REC, TR, PO, T, MI, O, S, CHA, M, CO, RO, SC, E, Z, BMAKE, BINS, EXPLODE, M2P" />
+      <input id="cmdInput" type="text" placeholder="Command: L, PL, A, C, REC, TR, PO, T, MI, O, S, CHA, M, CO, RO, SC, E, Z, BMAKE, BINS, EXPLODE, M2P, PROPS, PROPERTIES/PR" />
     </div>
     <div class="st-right">
       <label class="st-toggle" title="Show Grid">
@@ -790,7 +796,7 @@
         row.className='item'+(it.disabled?' disabled':'')+(it.submenu?' group':'');
         row.setAttribute('role','menuitem');
         const left=document.createElement('div');
-        const check=document.createElement('span'); check.className='check'; check.textContent = it.checked?'•':'';
+        const check=document.createElement('span'); check.className='check'; check.textContent = it.checked?'•':''; 
         const label=document.createElement('span'); label.className='label'; label.textContent=it.label||'';
         left.appendChild(check); left.appendChild(label);
         const right=document.createElement('div');
@@ -1153,11 +1159,27 @@
     /* ---------- Commands & keyboard ---------- */
     const cmdInput = document.getElementById('cmdInput');
     const cmdHistory = document.getElementById('cmdHistory');
-    function pushHistory(line){ cmdHistory.textContent = line; }
+    const cmdLog = []; // keep last 3 lines
+    function renderCmdLog(){
+      // show last 3, newest last, faint
+      cmdHistory.innerHTML = cmdLog.slice(-3).map((s,i)=> {
+        const idx = cmdLog.length-3+i+1;
+        return s ? `<div>${s}</div>` : '';
+      }).join('');
+    }
+    function pushHistory(line){ if(!line) return; cmdLog.push(line); if(cmdLog.length>60) cmdLog.shift(); renderCmdLog(); }
     function setMode(m){ state.mode=m; document.getElementById('modeLbl').textContent=m.charAt(0).toUpperCase()+m.slice(1); draw(); }
     function activateBtn(id){ document.querySelectorAll('.tool-btn').forEach(b=>b.classList.remove('active')); const el=document.getElementById(id); if(el) el.classList.add('active'); }
     function startCmd(name){
       state.lastCmd=name; pushHistory(name.toUpperCase());
+      if(name==='properties' || name==='pr'){ toggleDrawer(); cmdInput.value=''; return; }
+      if(name==='props'){
+        document.querySelector('.ribbon-tab.active')?.classList.remove('active');
+        document.querySelector('.ribbon-tab[data-tab="properties"]')?.classList.add('active');
+        renderTab('properties');
+        cmdInput.value=''; return;
+      }
+
       if(name==='point'){ setMode('point'); activateBtn('tb-point'); cmdInput.value=''; return; }
       if(name==='text'){ setMode('text'); activateBtn('tb-text'); cmdInput.value=''; return; }
       if(name==='arc3p' || name==='arc'){ setMode('arc3p'); activateBtn('tb-arc'); cmdInput.value=''; return; }
@@ -1219,6 +1241,8 @@
       if(t==='id'){ startCmd('id'); return; }
       if(t==='dist'){ startCmd('dist'); return; }
       if(t==='area'){ startCmd('area'); return; }
+      if(t==='props'){ startCmd('props'); return; }
+      if(t==='pr' || t==='properties'){ startCmd('properties'); return; }
     }
     cmdInput.addEventListener('keydown', function(e){
       if(e.key==='Enter'){ handleCmdEnter(cmdInput.value); cmdInput.value=''; }
@@ -1246,6 +1270,7 @@
       if((e.ctrlKey||e.metaKey) && (e.key==='y' || (e.shiftKey && (e.key==='Z' || e.key==='z')))){ e.preventDefault(); redo(); }
       if((e.ctrlKey||e.metaKey) && (e.key==='s' || e.key==='S')){ e.preventDefault(); saveJSON(); }
       if((e.ctrlKey||e.metaKey) && (e.key==='o' || e.key==='O')){ e.preventDefault(); document.getElementById('fileInput').click(); }
+      if((e.ctrlKey||e.metaKey) && e.key==='1'){ e.preventDefault(); toggleDrawer(); } // Ctrl+1 → Properties drawer
       if(e.key==='F8'){ state.ortho=!state.ortho; document.getElementById('orthoLock').checked=state.ortho; }
       if(e.key==='v' || e.key==='V'){ setMode('select'); activateBtn('tb-select'); }
     });
@@ -1330,7 +1355,7 @@
       state.drawing.entities=keep; clearSelection(); draw();
     }
 
-    /* ---------- Toolbar wiring ---------- */
+    /* ---------- Toolbar wiring (Home tab) ---------- */
     const q = sel=>document.querySelector(sel);
     q('#tb-select').onclick=()=>{ setMode('select'); activateBtn('tb-select'); state.action=null; disableDyn(); };
     q('#tb-point').onclick =()=> startCmd('point');
@@ -1359,13 +1384,199 @@
     q('#tb-explode').onclick=()=> startCmd('explode');
     q('#m2pBtn').onclick=()=> startCmd('m2p');
 
+    /* ---------- Unified Ribbon System ---------- */
+    const ribbonBody = document.getElementById('ribbonBody');
+    const HOME_HTML = ribbonBody.innerHTML;
+
+    // Copied text for properties
+    const PROPS_TEXT = `The AutoCAD Properties box, officially called the Properties Palette, is a crucial tool that allows you to view and modify the properties of selected objects. Its functions are contextual, meaning the information it displays changes depending on what object (or objects) you have selected.
+
+General Properties
+This is the most common section and applies to almost every object. Key functions here include:
+
+Color: Changes the color of the object.
+
+Layer: Assigns the object to a different layer. This is a fundamental way to organize your drawing.
+
+Linetype: Changes the appearance of the line (e.g., from solid to dashed or dotted).
+
+Linetype Scale: Adjusts the size of the pattern in the linetype.
+
+Lineweight: Sets the thickness of the line when plotted or displayed.
+
+Transparency: Makes the object see-through to varying degrees.
+
+Hyperlink: Attaches a URL or file path to an object.
+
+Geometric Properties
+This section deals with the object's size, shape, and position in the drawing. The specific properties shown depend entirely on the selected object.
+
+For a Line: You'll see its Start X/Y/Z and End X/Y/Z coordinates, as well as its Length and Angle.
+
+For a Circle: You'll find its Center X/Y/Z coordinates, Radius, Diameter, Circumference, and Area.
+
+For a Polyline: It shows whether it's Closed or Open, its Global Width, and its total Length.
+
+For a Hatch: You can change its Pattern Name, Angle, and Scale.
+
+Miscellaneous Properties
+This category contains additional settings that are specific to the object type.
+
+For Text (MText/DText): You can change the Contents (the actual text), Style, Justification, Height, and Rotation.
+
+For Blocks: You can modify the Block Name, Scale (X, Y, Z), and Rotation. If the block has attributes, you can edit their values here.
+
+For Dimensions: You can adjust the Dimension Style, Arrowheads, and override the Text Measurement.
+
+3D Visualization
+When working with 3D objects, this section becomes available.
+
+Material: Assigns a material for rendering (e.g., wood, metal, glass).
+
+Shadow Display: Controls how the object casts and receives shadows.
+
+In short, the Properties Palette is your central command center for editing the specific details of any object in your drawing without needing to use multiple commands. You can open it by typing PROPERTIES in the command line or by pressing Ctrl + 1.
+`;
+
+    const PROPERTIES_TAB_FUNCTIONS = [
+      {
+        title: 'General',
+        items: ['Color','Layer','Linetype','Linetype scale','Lineweight','Transparency','Hyperlink']
+      },
+      {
+        title: 'Geometric',
+        items: [
+          'Line: Start/End XYZ, Length, Angle',
+          'Circle: Center XYZ, Radius, Diameter, Circumference, Area',
+          'Polyline: Closed/Open, Global Width, Length',
+          'Hatch: Pattern name, Angle, Scale'
+        ]
+      },
+      {
+        title: 'Miscellaneous',
+        items: [
+          'Text: Contents, Style, Justification, Height, Rotation',
+          'Blocks: Name, Scale (X/Y/Z), Rotation, Attributes',
+          'Dimensions: Style, Arrowheads, Text override'
+        ]
+      },
+      { title: '3D Visualization', items: ['Material','Shadow display'] }
+    ];
+    window.PROPERTIES_TAB_FUNCTIONS = PROPERTIES_TAB_FUNCTIONS;
+
+    function wireRibbonHomeButtons(){
+      const bind=(id, fn)=>{ const el=document.getElementById(id); if(el) el.onclick = fn; };
+      bind('tb-select', ()=>{ setMode('select'); activateBtn('tb-select'); state.action=null; disableDyn(); });
+      bind('tb-point',  ()=> startCmd('point'));
+      bind('tb-line',   ()=> startCmd('line'));
+      bind('tb-arc',    ()=> startCmd('arc3p'));
+      bind('tb-poly',   ()=> startCmd('pline'));
+      bind('tb-rect',   ()=> startCmd('rect'));
+      bind('tb-circle', ()=> startCmd('circle'));
+      bind('tb-trace',  ()=> startCmd('trace'));
+      bind('tb-text',   ()=> startCmd('text'));
+
+      bind('tb-erase',  ()=> startCmd('erase'));
+      bind('tb-mirror', ()=> startCmd('mirror'));
+      bind('tb-offset', ()=> startCmd('offset'));
+      bind('tb-stretch',()=> startCmd('stretch'));
+      bind('tb-chamfer',()=> startCmd('chamfer'));
+      bind('tb-move',   ()=> startCmd('move'));
+      bind('tb-copy',   ()=> startCmd('copy'));
+      bind('tb-rotate', ()=> startCmd('rotate'));
+      bind('tb-scale',  ()=> startCmd('scale'));
+
+      bind('tb-make-block',   ()=> startCmd('bmake'));
+      bind('tb-insert-block', ()=> startCmd('bins'));
+      bind('tb-explode',      ()=> startCmd('explode'));
+
+      bind('tb-pan',      ()=>{ setMode('pan'); activateBtn('tb-pan'); });
+      bind('tb-zoom-win', ()=>{ state.action={type:'zoomwin',stage:0}; activateBtn('tb-zoom-win'); });
+      bind('tb-zoom-prev',()=> zoomPrevious());
+      bind('tb-zoom-ext', ()=> zoomExtents());
+
+      bind('m2pBtn', ()=> startCmd('m2p'));
+      bind('toggleDrawer', ()=> toggleDrawer());
+      bind('forceRedraw', ()=> draw());
+      bind('resetView',   ()=> zoomExtents());
+    }
+
+    function renderPropertiesTab(){
+      let html = `
+        <div class="group" data-group="props-actions">
+          <div class="grow">
+            <button class="tool-btn" id="propsOpenDrawer">Toggle Drawer</button>
+            <button class="tool-btn" id="propsApply">Apply to Selection</button>
+          </div>
+          <div class="gtitle">Properties — Actions</div>
+        </div>
+
+        <div class="group" data-group="props-info" style="min-width:420px; max-width:640px">
+          <div class="props-note">${PROPS_TEXT.replace(/\n/g,'<br/>')}</div>
+          <div class="gtitle">What is the Properties Palette?</div>
+        </div>
+      `;
+      for(const sec of PROPERTIES_TAB_FUNCTIONS){
+        html += `
+          <div class="group" data-group="props-${sec.title.toLowerCase().replace(/\s+/g,'-')}">
+            <div class="grow">
+              <ul class="props-list">
+                ${sec.items.map(it=>`<li>${it}</li>`).join('')}
+              </ul>
+            </div>
+            <div class="gtitle">${sec.title} Properties</div>
+          </div>
+        `;
+      }
+      ribbonBody.innerHTML = html;
+      const btnOpen = document.getElementById('propsOpenDrawer');
+      if(btnOpen) btnOpen.onclick = ()=> toggleDrawer();
+      const btnApply = document.getElementById('propsApply');
+      if(btnApply) btnApply.onclick = ()=> toggleDrawer(true);
+    }
+
+    function renderPlaceholderTab(name){
+      ribbonBody.innerHTML = `
+        <div class="group">
+          <div class="grow" style="padding:.4rem .2rem; color:#aab6d8">
+            No tools in the <b>${name}</b> tab yet.
+          </div>
+          <div class="gtitle">${name}</div>
+        </div>
+      `;
+    }
+
+    function renderTab(key){
+      switch(key){
+        case 'home':
+          ribbonBody.innerHTML = HOME_HTML;
+          wireRibbonHomeButtons();
+          break;
+        case 'properties':
+          renderPropertiesTab();
+          break;
+        case 'insert':
+        case 'annotate':
+        case 'view':
+        case 'manage':
+        case 'express':
+          renderPlaceholderTab(key.charAt(0).toUpperCase() + key.slice(1));
+          break;
+        default:
+          ribbonBody.innerHTML = HOME_HTML;
+          wireRibbonHomeButtons();
+      }
+    }
+
     document.querySelectorAll('.ribbon-tab').forEach(t=>{
       t.addEventListener('click', ()=>{
         document.querySelectorAll('.ribbon-tab').forEach(x=>x.classList.remove('active'));
         t.classList.add('active');
+        renderTab(t.dataset.tab);
       });
     });
 
+    /* ---------- Properties drawer toggle ---------- */
     const sideDrawer = document.getElementById('sideDrawer');
     function toggleDrawer(forceOpen){
       if(forceOpen===true){ sideDrawer.style.display='block'; return; }
@@ -1394,7 +1605,7 @@
     document.getElementById('navZoomIn').onclick = ()=>{ state.scale=clamp(state.scale*1.2,0.1,20); draw(); };
     document.getElementById('navZoomOut').onclick= ()=>{ state.scale=clamp(state.scale/1.2,0.1,20); draw(); };
     document.getElementById('navFit').onclick    = ()=> zoomExtents();
-        document.getElementById('navPan').onclick    = ()=> { setMode('pan'); activateBtn('tb-pan'); };
+    document.getElementById('navPan').onclick    = ()=> { setMode('pan'); activateBtn('tb-pan'); };
 
     /* ===== Layers UI ===== */
     function rebuildLayerUI(){
@@ -1408,7 +1619,6 @@
       }
       sel.value=state.currentLayer; propSel.value=state.currentLayer;
     }
-    function currentLayerObj(){ return state.layers.find(L=>L.name===state.currentLayer) || state.layers[0]; }
     function ensureLayer(name, color){
       let L = state.layers.find(x=>x.name===name);
       if(!L){ L = {name:name||'0', color:color||'#e0e6ff', visible:true}; state.layers.push(L); rebuildLayerUI(); }
@@ -1483,7 +1693,6 @@
       const x0=Math.min(a.x,b.x), x1=Math.max(a.x,b.x);
       const y0=Math.min(a.y,b.y), y1=Math.max(a.y,b.y);
       const w=Math.max(10, x1-x0), h=Math.max(10, y1-y0);
-      const wx = (w)/state.scale, wy=(h)/state.scale;
       const A=s2w(x0,y1), B=s2w(x1,y0);
       const worldW=B.x-A.x, worldH=B.y-A.y;
       const pad=20;
@@ -1506,10 +1715,7 @@
       state.drawing.entities.push({type:'poly', pts:pts, closed:true, layer:layer||state.currentLayer});
     }
     function quadThrough3(st,mid,en,u){
-      // simple quadratic Bezier recon from 3 points: st, mid (point on arc-ish), en
-      // Assume param t where t in [0,1], and "mid" corresponds to t=0.5 for preview
       const t=u, one=1-t;
-      // Reconstruct control point assuming mid at t=0.5: mid = (st + 2*Q + en)/4 => Q = 2*mid - (st+en)/2
       const Qx = 2*mid.x - 0.5*(st.x+en.x);
       const Qy = 2*mid.y - 0.5*(st.y+en.y);
       return {
@@ -1564,7 +1770,6 @@
       const base=state.dyn.lastBase || firstSelectedPoint() || {x:0,y:0};
       const ents=[]; let i,j, e, pts;
 
-      /* (your partial loop) */
       for(i=0;i<idxs.length;i++){
         e=state.drawing.entities[idxs[i]];
         if(e.type==='poly'){
@@ -1607,7 +1812,6 @@
           }
         });
       });
-      // remove originals
       state.drawing.entities = state.drawing.entities.filter((_,i)=>!state.drawing.selection[i]);
       clearSelection(); draw();
     }
@@ -1672,11 +1876,16 @@
     setCanvasSize();
     ensureLayer('0','#e0e6ff'); rebuildLayerUI(); rebuildBlockUI();
     okPill.textContent='OK ✓'; okPill2.textContent='Ready';
-   } catch(ex){
+
+    // Initialize ribbon on load
+    renderTab('home');
+    // Show a helpful tip in history
+    pushHistory('Tip: type PROPS to open the Properties tab; PR to toggle the drawer');
+
+  } catch(ex){
     showErr(ex.message||ex);
   }
 })();
-
 </script>
 </body>
 </html>
